@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../data/repositories/customer_repository.dart';
+import '../../../models/session.dart';
+import '../../../security/password_service.dart';
 
 class CustomersPage extends StatefulWidget {
   const CustomersPage({super.key});
@@ -9,12 +11,14 @@ class CustomersPage extends StatefulWidget {
 
 class _CustomersPageState extends State<CustomersPage> {
   final _repo = CustomerRepository();
+  final _passwordService = PasswordService();
   final _q = TextEditingController();
 
   List<Map<String, dynamic>> _items = [];
   Map<String, dynamic>? _selected;
   bool _loading = true;
   String? _error;
+  bool _isAuthenticated = false;
 
   final fTc = TextEditingController();
   final fEhliyet = TextEditingController();
@@ -26,7 +30,26 @@ class _CustomersPageState extends State<CustomersPage> {
   final fDurum = TextEditingController(text: 'Aktif');
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _checkPassword();
+  }
+
+  Future<void> _checkPassword() async {
+    final isAuthenticated = await PasswordService.showPasswordDialog(
+      context,
+      title: 'Müşteriler Sayfası',
+      description: '2. Şifre (Yönetici/Üst Rütbe) ile giriş yapınız',
+      verifyPassword: _passwordService.verifyPassword2,
+    );
+    
+    if (isAuthenticated) {
+      setState(() => _isAuthenticated = true);
+      _load();
+    } else {
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; _selected = null; });
@@ -64,6 +87,8 @@ class _CustomersPageState extends State<CustomersPage> {
         tel: fTel.text.trim(),
         email: fEmail.text.trim(),
         adres: fAdres.text.trim().isEmpty ? null : fAdres.text.trim(),
+        subeId: Session().current!.subeId,
+        calisanId: Session().current!.calisanId,
       );
       _clear(); await _load();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Müşteri eklendi')));
@@ -79,6 +104,8 @@ class _CustomersPageState extends State<CustomersPage> {
         email: fEmail.text.trim().isEmpty ? null : fEmail.text.trim(),
         adres: fAdres.text.trim().isEmpty ? null : fAdres.text.trim(),
         durum: fDurum.text.trim().isEmpty ? null : fDurum.text.trim(),
+        subeId: Session().current!.subeId,
+        calisanId: Session().current!.calisanId,
       );
       await _load();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Müşteri güncellendi')));
@@ -88,7 +115,11 @@ class _CustomersPageState extends State<CustomersPage> {
   Future<void> _delete() async {
     if (_selected == null) return;
     try {
-      await _repo.deleteSoft(_selected!['MUSTERI_ID'] as int);
+      await _repo.deleteSoft(
+        _selected!['MUSTERI_ID'] as int,
+        subeId: Session().current!.subeId,
+        calisanId: Session().current!.calisanId,
+      );
       _clear(); await _load();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Müşteri silindi (soft)')));
     } catch (e) { if (mounted) _err(e); }
@@ -100,6 +131,10 @@ class _CustomersPageState extends State<CustomersPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isAuthenticated) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
     return Row(children: [
       Expanded(flex: 2, child: Column(children: [
         Padding(

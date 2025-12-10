@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../data/repositories/sube_repository.dart';
+import '../../../security/password_service.dart';
 
 class BranchesPage extends StatefulWidget {
   const BranchesPage({super.key});
@@ -9,12 +10,14 @@ class BranchesPage extends StatefulWidget {
 
 class _BranchesPageState extends State<BranchesPage> {
   final _repo = SubeRepository();
+  final _passwordService = PasswordService();
   final _q = TextEditingController();
 
   List<Map<String, dynamic>> _items = [];
   Map<String, dynamic>? _selected;
   bool _loading = true;
   String? _error;
+  bool _isAuthenticated = false;
 
   final fAdi = TextEditingController();
   final fAdres = TextEditingController();
@@ -23,7 +26,26 @@ class _BranchesPageState extends State<BranchesPage> {
   final fIlce = TextEditingController();
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _checkPassword();
+  }
+
+  Future<void> _checkPassword() async {
+    final isAuthenticated = await PasswordService.showPasswordDialog(
+      context,
+      title: 'Şubeler Sayfası',
+      description: '2. Şifre (Yönetici/Üst Rütbe) ile giriş yapınız',
+      verifyPassword: _passwordService.verifyPassword2,
+    );
+    
+    if (isAuthenticated) {
+      setState(() => _isAuthenticated = true);
+      _load();
+    } else {
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; _selected = null; });
@@ -103,6 +125,10 @@ class _BranchesPageState extends State<BranchesPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isAuthenticated) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
     return Row(children: [
       Expanded(flex: 2, child: Column(children: [
         Padding(

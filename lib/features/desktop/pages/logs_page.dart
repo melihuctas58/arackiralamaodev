@@ -1,14 +1,39 @@
 import 'package:flutter/material.dart';
 import '../../../data/repositories/logs_repository.dart';
 import '../../../models/session.dart';
+import '../../../security/password_service.dart';
 
 class LogsPage extends StatefulWidget { const LogsPage({super.key}); @override State<LogsPage> createState() => _LogsPageState(); }
 class _LogsPageState extends State<LogsPage> {
   final _repo = LogsRepository();
+  final _passwordService = PasswordService();
   final _q = TextEditingController();
   List<Map<String, dynamic>> _items = [];
   Map<String, dynamic>? _selected;
   String? _error; bool _loading = false;
+  bool _isAuthenticated = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPassword();
+  }
+
+  Future<void> _checkPassword() async {
+    final isAuthenticated = await PasswordService.showPasswordDialog(
+      context,
+      title: 'Loglar Sayfası',
+      description: '1. Şifre ile giriş yapınız',
+      verifyPassword: _passwordService.verifyPassword1,
+    );
+    
+    if (isAuthenticated) {
+      setState(() => _isAuthenticated = true);
+      _load();
+    } else {
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; _selected = null; _items = []; });
@@ -16,10 +41,12 @@ class _LogsPageState extends State<LogsPage> {
     catch (e) { _error = e.toString(); } finally { setState(() => _loading = false); }
   }
 
-  @override void initState() { super.initState(); _load(); }
-
   @override
   Widget build(BuildContext context) {
+    if (!_isAuthenticated) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
     return Row(children: [
       Expanded(flex: 2, child: Column(children: [
         Padding(padding: const EdgeInsets.all(12), child: Row(children: [

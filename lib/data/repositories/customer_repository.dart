@@ -1,7 +1,9 @@
 import '../db/mssql_service.dart';
+import 'logs_repository.dart';
 
 class CustomerRepository {
   final _db = MssqlService();
+  final _logsRepo = LogsRepository();
 
   Future<List<Map<String, dynamic>>> listAll({String? q}) async {
     final s = q?.replaceAll("'", "''");
@@ -35,6 +37,8 @@ class CustomerRepository {
     String? email,
     String? adres,
     String? durum,
+    int? subeId,
+    int? calisanId,
   }) async {
     final ups = <String>[];
     if (tel != null) ups.add("TELEFON='${tel.replaceAll("'", "''")}'");
@@ -43,9 +47,35 @@ class CustomerRepository {
     if (durum != null) ups.add("DURUM='${durum.replaceAll("'", "''")}'");
     if (ups.isEmpty) return;
     await _db.execute("UPDATE dbo.MUSTERILER SET ${ups.join(', ')} WHERE MUSTERI_ID=$id");
+    
+    // Loglama
+    if (subeId != null) {
+      await _logsRepo.add(
+        subeId: subeId,
+        calisanId: calisanId,
+        action: 'MUSTERI_GUNCELLEME',
+        message: 'Müşteri güncellendi: ID#$id',
+        details: {'musteri_id': id, 'updates': ups.join(', ')},
+        relatedType: 'MUSTERI',
+        relatedId: id,
+      );
+    }
   }
 
-  Future<void> deleteSoft(int id) async {
+  Future<void> deleteSoft(int id, {int? subeId, int? calisanId}) async {
     await _db.execute("UPDATE dbo.MUSTERILER SET DURUM='Silindi' WHERE MUSTERI_ID=$id");
+    
+    // Loglama
+    if (subeId != null) {
+      await _logsRepo.add(
+        subeId: subeId,
+        calisanId: calisanId,
+        action: 'MUSTERI_SILME',
+        message: 'Müşteri silindi (soft delete): ID#$id',
+        details: {'musteri_id': id},
+        relatedType: 'MUSTERI',
+        relatedId: id,
+      );
+    }
   }
 }
