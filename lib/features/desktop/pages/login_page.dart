@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:window_manager/window_manager.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../data/repositories/sube_repository.dart';
 import '../../../data/repositories/employee_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../models/session.dart';
 import '../../../widgets/search_select_dialog.dart';
+import '../../../security/password_service.dart';
 import 'home_dashboard_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -19,6 +19,7 @@ class _LoginPageState extends State<LoginPage> {
   final _subeRepo = SubeRepository();
   final _empRepo = EmployeeRepository();
   final _authRepo = AuthRepository();
+  final _passwordService = PasswordService();
 
   final _passCtrl = TextEditingController();
   final _newPassCtrl = TextEditingController();
@@ -32,7 +33,7 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _needsSetup = false;
   bool _passVerified = false;
-  String _currentPass = '0000';
+  String _currentPass = '';
 
   @override
   void initState() {
@@ -41,12 +42,11 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _loadPassword() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString('app_password');
-    if (saved == null || saved == '0000') {
+    final saved = await _passwordService.getPassword1();
+    if (saved == PasswordService.defaultPassword1) {
       setState(() {
         _needsSetup = true;
-        _currentPass = '0000';
+        _currentPass = saved;
       });
     } else {
       setState(() {
@@ -57,8 +57,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _savePassword(String pass) async {
-    final prefs = await SharedPreferences. getInstance();
-    await prefs.setString('app_password', pass);
+    await _passwordService.setPassword1(pass);
     setState(() {
       _currentPass = pass;
       _needsSetup = false;
@@ -71,7 +70,8 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _error = 'Sifre giriniz');
       return;
     }
-    if (_passCtrl.text.trim() == _currentPass) {
+    final isValid = await _passwordService.verifyPassword1(_passCtrl.text.trim());
+    if (isValid) {
       setState(() {
         _passVerified = true;
         _error = null;
