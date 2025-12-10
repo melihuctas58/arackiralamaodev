@@ -4,6 +4,7 @@ import 'package:window_manager/window_manager.dart';
 import '../../../models/session.dart';
 import '../../../models/ui_router.dart';
 import '../../../data/repositories/notifications_repository.dart';
+import '../../../widgets/password_protected_page.dart';
 import 'vehicles_page.dart';
 import 'reservations_page.dart';
 import 'fines_page.dart';
@@ -18,6 +19,8 @@ import 'payments_page.dart';
 import 'accidents_page.dart';
 import 'history_page.dart';
 import 'logs_page.dart';
+import 'customers_page.dart';
+import 'password_management_page.dart';
 import 'login_page.dart';
 
 class HomeDashboardPage extends StatefulWidget {
@@ -103,14 +106,31 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
       _NavItem('Sigortalar', Icons.local_police, const InsurancesPage()),
       _NavItem('Kiralama', Icons.key, const RentalsPage()),
       _NavItem('Kampanyalar', Icons.local_offer, const CampaignsPage()),
-      _NavItem('Calisanlar', Icons.badge, const EmployeesPage()),
-      _NavItem('Subeler', Icons.home_work, const BranchesPage()),
+      _NavItem('Musteriler', Icons.people, const CustomersPage()),
+      _NavItem('Calisanlar', Icons.badge, const PasswordProtectedPage(
+        child: EmployeesPage(),
+        passwordKey: 'admin_password',
+        defaultPassword: '1234',
+        title: 'Çalışanlar Sayfası - Yönetici Şifresi',
+      )),
+      _NavItem('Subeler', Icons.home_work, const PasswordProtectedPage(
+        child: BranchesPage(),
+        passwordKey: 'admin_password',
+        defaultPassword: '1234',
+        title: 'Şubeler Sayfası - Yönetici Şifresi',
+      )),
       _NavItem('Bildirimler', Icons.notifications, const NotificationsPage()),
       _NavItem('Bakim', Icons.build, const MaintenancePage()),
       _NavItem('Odemeler', Icons.payments, const PaymentsPage()),
       _NavItem('Kaza', Icons.warning, const AccidentsPage()),
       _NavItem('Gecmis', Icons.history, const HistoryPage()),
-      _NavItem('Loglar', Icons.list_alt, const LogsPage()),
+      _NavItem('Loglar', Icons.list_alt, const PasswordProtectedPage(
+        child: LogsPage(),
+        passwordKey: 'app_password',
+        defaultPassword: '0000',
+        title: 'Loglar Sayfası - Uygulama Şifresi',
+      )),
+      _NavItem('Sifre Yonetimi', Icons.vpn_key, const PasswordManagementPage()),
     ];
   }
 
@@ -230,19 +250,21 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
             runSpacing: 16,
             children: [
               _tile(Icons.directions_car, 'Araclar', 'Arac yonetimi', 1),
-              _tile(Icons. event_available, 'Rezervasyonlar', 'Rezervasyon islemleri', 2),
+              _tile(Icons.event_available, 'Rezervasyonlar', 'Rezervasyon islemleri', 2),
               _tile(Icons.report, 'Cezalar', 'Ceza takibi', 3),
               _tile(Icons.local_police, 'Sigortalar', 'Sigorta yonetimi', 4),
               _tile(Icons.key, 'Kiralama', 'Kiralama islemleri', 5),
               _tile(Icons.campaign, 'Kampanyalar', 'Kampanya yonetimi', 6),
-              _tile(Icons.badge, 'Calisanlar', 'Calisan yonetimi', 7),
-              _tile(Icons. home_work, 'Subeler', 'Sube yonetimi', 8),
-              _tile(Icons. notifications, 'Bildirimler', 'Bildirim merkezi', 9),
-              _tile(Icons.build, 'Bakim', 'Bakim kayitlari', 10),
-              _tile(Icons.payments, 'Odemeler', 'Odeme takibi', 11),
-              _tile(Icons.warning, 'Kaza', 'Kaza kayitlari', 12),
-              _tile(Icons.history, 'Gecmis', 'Kiralama gecmisi', 13),
-              _tile(Icons.list_alt, 'Loglar', 'Sistem loglari', 14),
+              _tile(Icons.people, 'Musteriler', 'Musteri yonetimi', 7),
+              _tile(Icons.badge, 'Calisanlar', 'Calisan yonetimi', 8),
+              _tile(Icons.home_work, 'Subeler', 'Sube yonetimi', 9),
+              _tile(Icons.notifications, 'Bildirimler', 'Bildirim merkezi', 10),
+              _tile(Icons.build, 'Bakim', 'Bakim kayitlari', 11),
+              _tile(Icons.payments, 'Odemeler', 'Odeme takibi', 12),
+              _tile(Icons.warning, 'Kaza', 'Kaza kayitlari', 13),
+              _tile(Icons.history, 'Gecmis', 'Kiralama gecmisi', 14),
+              _tile(Icons.list_alt, 'Loglar', 'Sistem loglari', 15),
+              _tile(Icons.vpn_key, 'Sifre Yonetimi', 'Sifre degistirme', 16),
             ],
           ),
         ],
