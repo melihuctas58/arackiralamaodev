@@ -11,9 +11,13 @@ class _CampaignsPageState extends State<CampaignsPage> {
   final _repo = CampaignRepository();
   final _q = TextEditingController();
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
   Map<String, dynamic>? _selected;
   bool _loading = true;
   String? _error;
+
+  // Filtreler
+  String _filterAktif = 'Tümü'; // Tümü, Aktif, Pasif
 
   final fAd = TextEditingController();
   final fIndirim = TextEditingController();
@@ -27,8 +31,25 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; _selected = null; });
-    try { _items = await _repo.listAll(q: _q.text.trim().isEmpty ? null : _q.text.trim()); }
+    try {
+      _items = await _repo.listAll(q: _q.text.trim().isEmpty ? null : _q.text.trim());
+      _applyFilters();
+    }
     catch (e) { _error = e.toString(); } finally { setState(() => _loading = false); }
+  }
+
+  void _applyFilters() {
+    _filteredItems = _items.where((m) {
+      // Aktif/Pasif filtresi
+      if (_filterAktif != 'Tümü') {
+        final aktif = (m['AKTIF_MI'] == 1);
+        if (_filterAktif == 'Aktif' && !aktif) return false;
+        if (_filterAktif == 'Pasif' && aktif) return false;
+      }
+      
+      return true;
+    }).toList();
+    setState(() {});
   }
 
   void _fill(Map<String, dynamic> m) {
@@ -91,13 +112,37 @@ class _CampaignsPageState extends State<CampaignsPage> {
           Expanded(child: TextField(controller: _q, decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Kampanya ara', border: OutlineInputBorder()), onSubmitted: (_) => _load())),
           const SizedBox(width: 8), FilledButton(onPressed: _load, child: const Text('Yenile')),
         ])),
+        
+        // Filtreler
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(children: [
+            const Text('Filtreler: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            
+            // Aktif/Pasif Filtresi
+            DropdownButton<String>(
+              value: _filterAktif,
+              items: ['Tümü', 'Aktif', 'Pasif'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterAktif = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            
+            const Spacer(),
+            Text('${_filteredItems.length} / ${_items.length} kampanya', style: const TextStyle(color: Colors.grey)),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        
         Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) : _error != null ? Center(child: Text('Hata: $_error')) :
           ListView.separated(
             padding: const EdgeInsets.all(12),
-            itemCount: _items.length,
+            itemCount: _filteredItems.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (_, i) {
-              final m = _items[i];
+              final m = _filteredItems[i];
               final aktif = (m['AKTIF_MI'] == 1);
               return Card(child: ListTile(
                 leading: Icon(Icons.local_offer, color: aktif ? Colors.green : Colors.grey),
