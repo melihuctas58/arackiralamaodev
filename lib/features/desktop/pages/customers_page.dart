@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../data/repositories/customer_repository.dart';
+import '../../../data/repositories/logs_repository.dart';
+import '../../../models/session.dart';
 
 class CustomersPage extends StatefulWidget {
   const CustomersPage({super.key});
@@ -9,12 +11,18 @@ class CustomersPage extends StatefulWidget {
 
 class _CustomersPageState extends State<CustomersPage> {
   final _repo = CustomerRepository();
+  final _logsRepo = LogsRepository();
   final _q = TextEditingController();
 
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
   Map<String, dynamic>? _selected;
   bool _loading = true;
   String? _error;
+
+  // Filtreler
+  String _filterDurum = 'Tümü'; // Tümü, Aktif, Pasif, Silindi
+  String _filterType = 'Tümü'; // Tümü, Ad/Soyad, TC, Telefon, Email
 
   final fTc = TextEditingController();
   final fEhliyet = TextEditingController();
@@ -33,8 +41,48 @@ class _CustomersPageState extends State<CustomersPage> {
     try {
       final all = await _repo.listAll(q: _q.text.trim().isEmpty ? null : _q.text.trim());
       _items = all;
+      _applyFilters();
     } catch (e) { _error = e.toString(); }
     finally { setState(() => _loading = false); }
+  }
+
+  void _applyFilters() {
+    _filteredItems = _items.where((m) {
+      // Durum filtresi
+      if (_filterDurum != 'Tümü') {
+        final durum = (m['DURUM'] ?? 'Aktif').toString();
+        if (_filterDurum == 'Aktif' && durum != 'Aktif') return false;
+        if (_filterDurum == 'Pasif' && durum != 'Pasif') return false;
+        if (_filterDurum == 'Silindi' && durum != 'Silindi') return false;
+      }
+
+      // Tip bazlı filtreleme (arama sorgusu varsa)
+      if (_q.text.trim().isNotEmpty && _filterType != 'Tümü') {
+        final query = _q.text.trim().toLowerCase();
+        switch (_filterType) {
+          case 'Ad/Soyad':
+            final ad = (m['AD'] ?? '').toString().toLowerCase();
+            final soyad = (m['SOYAD'] ?? '').toString().toLowerCase();
+            if (!ad.contains(query) && !soyad.contains(query)) return false;
+            break;
+          case 'TC':
+            final tc = (m['TC_NO'] ?? '').toString().toLowerCase();
+            if (!tc.contains(query)) return false;
+            break;
+          case 'Telefon':
+            final tel = (m['TELEFON'] ?? '').toString().toLowerCase();
+            if (!tel.contains(query)) return false;
+            break;
+          case 'Email':
+            final email = (m['E-MAIL'] ?? '').toString().toLowerCase();
+            if (!email.contains(query)) return false;
+            break;
+        }
+      }
+
+      return true;
+    }).toList();
+    setState(() {});
   }
 
   void _fill(Map<String, dynamic> m) {
@@ -65,6 +113,16 @@ class _CustomersPageState extends State<CustomersPage> {
         email: fEmail.text.trim(),
         adres: fAdres.text.trim().isEmpty ? null : fAdres.text.trim(),
       );
+      
+      // Log the action
+      await _logsRepo.add(
+        subeId: Session().current!.subeId,
+        calisanId: Session().current?.calisanId,
+        action: 'MUSTERI_EKLEME',
+        message: 'Müşteri eklendi: ${fAd.text} ${fSoyad.text} (TC: ${fTc.text})',
+        relatedType: 'MUSTERI',
+      );
+      
       _clear(); await _load();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Müşteri eklendi')));
     } catch (e) { if (mounted) _err(e); }
@@ -73,13 +131,25 @@ class _CustomersPageState extends State<CustomersPage> {
   Future<void> _update() async {
     if (_selected == null) return;
     try {
+      final musteriId = _selected!['MUSTERI_ID'] as int;
       await _repo.update(
-        id: _selected!['MUSTERI_ID'] as int,
+        id: musteriId,
         tel: fTel.text.trim().isEmpty ? null : fTel.text.trim(),
         email: fEmail.text.trim().isEmpty ? null : fEmail.text.trim(),
         adres: fAdres.text.trim().isEmpty ? null : fAdres.text.trim(),
         durum: fDurum.text.trim().isEmpty ? null : fDurum.text.trim(),
       );
+      
+      // Log the action
+      await _logsRepo.add(
+        subeId: Session().current!.subeId,
+        calisanId: Session().current?.calisanId,
+        action: 'MUSTERI_GUNCELLEME',
+        message: 'Müşteri güncellendi: ${fAd.text} ${fSoyad.text}',
+        relatedType: 'MUSTERI',
+        relatedId: musteriId,
+      );
+      
       await _load();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Müşteri güncellendi')));
     } catch (e) { if (mounted) _err(e); }
@@ -88,7 +158,19 @@ class _CustomersPageState extends State<CustomersPage> {
   Future<void> _delete() async {
     if (_selected == null) return;
     try {
-      await _repo.deleteSoft(_selected!['MUSTERI_ID'] as int);
+      final musteriId = _selected!['MUSTERI_ID'] as int;
+      await _repo.deleteSoft(musteriId);
+      
+      // Log the action
+      await _logsRepo.add(
+        subeId: Session().current!.subeId,
+        calisanId: Session().current?.calisanId,
+        action: 'MUSTERI_SILME',
+        message: 'Müşteri silindi (soft): ${fAd.text} ${fSoyad.text}',
+        relatedType: 'MUSTERI',
+        relatedId: musteriId,
+      );
+      
       _clear(); await _load();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Müşteri silindi (soft)')));
     } catch (e) { if (mounted) _err(e); }
@@ -116,21 +198,83 @@ class _CustomersPageState extends State<CustomersPage> {
             OutlinedButton(onPressed: () { _q.clear(); _load(); }, child: const Text('Temizle')),
           ]),
         ),
+        
+        // Filtreler
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(children: [
+            const Text('Filtreler: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            
+            // Durum Filtresi
+            DropdownButton<String>(
+              value: _filterDurum,
+              items: ['Tümü', 'Aktif', 'Pasif', 'Silindi'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterDurum = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            const SizedBox(width: 16),
+            
+            // Tip Filtresi
+            DropdownButton<String>(
+              value: _filterType,
+              items: ['Tümü', 'Ad/Soyad', 'TC', 'Telefon', 'Email'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterType = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            
+            const Spacer(),
+            Text('${_filteredItems.length} / ${_items.length} kayıt', style: const TextStyle(color: Colors.grey)),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        
         Expanded(
           child: _loading ? const Center(child: CircularProgressIndicator())
             : _error != null ? Center(child: Text('Hata: $_error'))
             : ListView.separated(
                 padding: const EdgeInsets.all(12),
-                itemCount: _items.length,
+                itemCount: _filteredItems.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
-                  final m = _items[i];
-                  return ListTile(
-                    tileColor: (_selected?['MUSTERI_ID'] == m['MUSTERI_ID']) ? Colors.indigo.withOpacity(.08) : null,
-                    leading: const Icon(Icons.person),
-                    title: Text('${m['AD'] ?? ''} ${m['SOYAD'] ?? ''}'),
-                    subtitle: Text('TC: ${m['TC_NO'] ?? ''} • Tel: ${m['TELEFON'] ?? ''} • ${m['E-MAIL'] ?? ''} • ${m['DURUM'] ?? ''}'),
-                    onTap: () => _fill(m),
+                  final m = _filteredItems[i];
+                  final durum = (m['DURUM'] ?? 'Aktif').toString();
+                  final durumColor = durum == 'Aktif' ? Colors.green : (durum == 'Silindi' ? Colors.red : Colors.orange);
+                  
+                  return Card(
+                    child: ListTile(
+                      tileColor: (_selected?['MUSTERI_ID'] == m['MUSTERI_ID']) ? Colors.indigo.withOpacity(.08) : null,
+                      leading: Icon(Icons.person, color: durumColor),
+                      title: Text('${m['AD'] ?? ''} ${m['SOYAD'] ?? ''}'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('TC: ${m['TC_NO'] ?? ''} • Tel: ${m['TELEFON'] ?? ''}'),
+                          Text('${m['E-MAIL'] ?? ''}'),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: durumColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: durumColor),
+                                ),
+                                child: Text(
+                                  durum,
+                                  style: TextStyle(color: durumColor, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      onTap: () => _fill(m),
+                    ),
                   );
                 },
               ),
@@ -142,13 +286,13 @@ class _CustomersPageState extends State<CustomersPage> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(_selected == null ? 'Müşteri Ekle' : 'Müşteri Düzenle', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          TextField(controller: fTc, decoration: const InputDecoration(labelText: 'TC', border: OutlineInputBorder())),
+          TextField(controller: fTc, decoration: const InputDecoration(labelText: 'TC', border: OutlineInputBorder()), enabled: _selected == null),
           const SizedBox(height: 8),
-          TextField(controller: fEhliyet, decoration: const InputDecoration(labelText: 'Ehliyet No', border: OutlineInputBorder())),
+          TextField(controller: fEhliyet, decoration: const InputDecoration(labelText: 'Ehliyet No', border: OutlineInputBorder()), enabled: _selected == null),
           const SizedBox(height: 8),
-          TextField(controller: fAd, decoration: const InputDecoration(labelText: 'Ad', border: OutlineInputBorder())),
+          TextField(controller: fAd, decoration: const InputDecoration(labelText: 'Ad', border: OutlineInputBorder()), enabled: _selected == null),
           const SizedBox(height: 8),
-          TextField(controller: fSoyad, decoration: const InputDecoration(labelText: 'Soyad', border: OutlineInputBorder())),
+          TextField(controller: fSoyad, decoration: const InputDecoration(labelText: 'Soyad', border: OutlineInputBorder()), enabled: _selected == null),
           const SizedBox(height: 8),
           TextField(controller: fTel, decoration: const InputDecoration(labelText: 'Telefon', border: OutlineInputBorder())),
           const SizedBox(height: 8),
@@ -156,7 +300,12 @@ class _CustomersPageState extends State<CustomersPage> {
           const SizedBox(height: 8),
           TextField(controller: fAdres, maxLines: 2, decoration: const InputDecoration(labelText: 'Adres', border: OutlineInputBorder())),
           const SizedBox(height: 8),
-          TextField(controller: fDurum, decoration: const InputDecoration(labelText: 'Durum', border: OutlineInputBorder())),
+          DropdownButtonFormField<String>(
+            value: fDurum.text.isEmpty ? 'Aktif' : fDurum.text,
+            decoration: const InputDecoration(labelText: 'Durum', border: OutlineInputBorder()),
+            items: ['Aktif', 'Pasif', 'Silindi'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+            onChanged: (v) => setState(() => fDurum.text = v ?? 'Aktif'),
+          ),
           const SizedBox(height: 12),
           Row(children: [
             if (_selected == null)
