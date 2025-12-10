@@ -183,10 +183,55 @@ class _AccidentsPageState extends State<AccidentsPage> {
       return;
     }
 
+    // Ödeme tipi seçimi
+    String? selectedTip;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        String tempTip = 'Nakit';
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Ödeme Tipi Seçiniz'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Kalan Tutar: ${kalan.toStringAsFixed(2)} TL'),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: tempTip,
+                  decoration: const InputDecoration(
+                    labelText: 'Ödeme Tipi',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: ['Nakit', 'Havale', 'Kredi Kartı']
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (v) => setState(() => tempTip = v ?? 'Nakit'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('İptal'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(tempTip),
+                child: const Text('Öde'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    
+    if (result == null) return;
+    selectedTip = result;
+
     try {
-      await _payRepo.add(kazaId:  kazaId, tutar: kalan, tur: 'Kaza', tipi: 'Nakit');
+      await _payRepo.add(kazaId: kazaId, tutar: kalan, tur: 'Kaza', tipi: selectedTip);
       await _load();
-      _sn('Kaza icin ${kalan. toStringAsFixed(2)} TL odeme eklendi');
+      _sn('Kaza icin ${kalan.toStringAsFixed(2)} TL ($selectedTip) odeme eklendi');
     } catch (e) {
       _err(e);
     }
