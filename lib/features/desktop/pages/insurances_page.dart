@@ -15,9 +15,16 @@ class _InsurancesPageState extends State<InsurancesPage> {
   final _q = TextEditingController();
 
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
   Map<String, dynamic>? _selected;
   bool _loading = false;
   String? _error;
+  
+  // Filtreler
+  String _filterPayStatus = 'Tümü'; // Tümü, Ödendi, Kısmi, Ödenmedi
+  String _filterAktif = 'Tümü'; // Tümü, Aktif, Pasif
+  String _filterKapsam = 'Tümü';
+  List<String> _kapsamTurleri = ['Tümü'];
 
   Map<String, dynamic>? selArac;
   final fAd = TextEditingController();
@@ -32,14 +39,51 @@ class _InsurancesPageState extends State<InsurancesPage> {
     setState(() { _loading = true; _error = null; _items = []; _selected = null; });
     try {
       _items = await _repo.listByBranch(Session().current!.subeId, q: _q.text.trim());
+      
+      // Kapsam türlerini topla
+      final kapsamSet = <String>{'Tümü'};
       for (final m in _items) {
         final id = m['SIGORTA_ID'] as int;
         final maliyet = (m['MALIYET'] as num?)?.toDouble() ?? 0.0;
         final paid = await _payRepo.totalByInsurance(id);
         m['PAID_TOTAL'] = paid;
         m['PAY_STATUS'] = paid >= maliyet && maliyet > 0 ? 'Ödendi' : (paid > 0 ? 'Kısmi' : 'Yok');
+        
+        final kapsam = (m['KAPSAM_TURU'] ?? '').toString();
+        if (kapsam.isNotEmpty) kapsamSet.add(kapsam);
       }
+      _kapsamTurleri = kapsamSet.toList()..sort();
+      
+      _applyFilters();
     } catch (e) { _error = e.toString(); } finally { setState(() => _loading = false); }
+  }
+  
+  void _applyFilters() {
+    _filteredItems = _items.where((m) {
+      // Ödeme durumu filtresi
+      final payStatus = (m['PAY_STATUS'] ?? 'Yok') as String;
+      if (_filterPayStatus != 'Tümü') {
+        if (_filterPayStatus == 'Ödendi' && payStatus != 'Ödendi') return false;
+        if (_filterPayStatus == 'Kısmi' && payStatus != 'Kısmi') return false;
+        if (_filterPayStatus == 'Ödenmedi' && payStatus != 'Yok') return false;
+      }
+      
+      // Aktif/Pasif filtresi
+      if (_filterAktif != 'Tümü') {
+        final aktifMi = ((m['AKTIFMI'] ?? 0) == 1);
+        if (_filterAktif == 'Aktif' && !aktifMi) return false;
+        if (_filterAktif == 'Pasif' && aktifMi) return false;
+      }
+      
+      // Kapsam türü filtresi
+      if (_filterKapsam != 'Tümü') {
+        final kapsam = (m['KAPSAM_TURU'] ?? '').toString();
+        if (kapsam != _filterKapsam) return false;
+      }
+      
+      return true;
+    }).toList();
+    setState(() {});
   }
 
   void _fill(Map<String, dynamic> m) {
@@ -125,13 +169,59 @@ class _InsurancesPageState extends State<InsurancesPage> {
           const SizedBox(width: 8), FilledButton(onPressed: _load, child: const Text('Yenile')),
           const Spacer(), TextButton.icon(onPressed: () => UiRouter().go(0), icon: const Icon(Icons.home, color: Colors.indigo), label: const Text('Ana Ekran')),
         ])),
+        
+        // Filtreler
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(children: [
+            const Text('Filtreler: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            
+            // Ödeme Durumu Filtresi
+            DropdownButton<String>(
+              value: _filterPayStatus,
+              items: ['Tümü', 'Ödendi', 'Kısmi', 'Ödenmedi'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterPayStatus = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            const SizedBox(width: 16),
+            
+            // Aktif/Pasif Filtresi
+            DropdownButton<String>(
+              value: _filterAktif,
+              items: ['Tümü', 'Aktif', 'Pasif'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterAktif = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            const SizedBox(width: 16),
+            
+            // Kapsam Türü Filtresi
+            DropdownButton<String>(
+              value: _kapsamTurleri.contains(_filterKapsam) ? _filterKapsam : 'Tümü',
+              items: _kapsamTurleri.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterKapsam = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            
+            const Spacer(),
+            Text('${_filteredItems.length} / ${_items.length} kayıt', style: const TextStyle(color: Colors.grey)),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        
         Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) : _error != null ? Center(child: Text('Hata: $_error')) :
           ListView.separated(
             padding: const EdgeInsets.all(12),
-            itemCount: _items.length,
+            itemCount: _filteredItems.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (_, i) {
-              final m = _items[i];
+              final m = _filteredItems[i];
               final payStatus = (m['PAY_STATUS'] ?? 'Yok') as String;
               final paidTotal = (m['PAID_TOTAL'] as num?)?.toDouble() ?? 0.0;
               final maliyet = (m['MALIYET'] as num?)?.toDouble() ?? 0.0;

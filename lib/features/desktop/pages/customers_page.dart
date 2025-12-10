@@ -12,9 +12,13 @@ class _CustomersPageState extends State<CustomersPage> {
   final _q = TextEditingController();
 
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
   Map<String, dynamic>? _selected;
   bool _loading = true;
   String? _error;
+  
+  // Filtreler
+  String _filterDurum = 'Tümü'; // Tümü, Aktif, Silindi
 
   final fTc = TextEditingController();
   final fEhliyet = TextEditingController();
@@ -33,8 +37,23 @@ class _CustomersPageState extends State<CustomersPage> {
     try {
       final all = await _repo.listAll(q: _q.text.trim().isEmpty ? null : _q.text.trim());
       _items = all;
+      _applyFilters();
     } catch (e) { _error = e.toString(); }
     finally { setState(() => _loading = false); }
+  }
+  
+  void _applyFilters() {
+    _filteredItems = _items.where((m) {
+      // Durum filtresi
+      if (_filterDurum != 'Tümü') {
+        final durum = (m['DURUM'] ?? 'Aktif').toString();
+        if (_filterDurum == 'Aktif' && durum != 'Aktif') return false;
+        if (_filterDurum == 'Silindi' && durum != 'Silindi') return false;
+      }
+      
+      return true;
+    }).toList();
+    setState(() {});
   }
 
   void _fill(Map<String, dynamic> m) {
@@ -116,15 +135,39 @@ class _CustomersPageState extends State<CustomersPage> {
             OutlinedButton(onPressed: () { _q.clear(); _load(); }, child: const Text('Temizle')),
           ]),
         ),
+        
+        // Filtreler
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(children: [
+            const Text('Filtreler: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            
+            // Durum Filtresi
+            DropdownButton<String>(
+              value: _filterDurum,
+              items: ['Tümü', 'Aktif', 'Silindi'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterDurum = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            
+            const Spacer(),
+            Text('${_filteredItems.length} / ${_items.length} kayıt', style: const TextStyle(color: Colors.grey)),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        
         Expanded(
           child: _loading ? const Center(child: CircularProgressIndicator())
             : _error != null ? Center(child: Text('Hata: $_error'))
             : ListView.separated(
                 padding: const EdgeInsets.all(12),
-                itemCount: _items.length,
+                itemCount: _filteredItems.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
-                  final m = _items[i];
+                  final m = _filteredItems[i];
                   return ListTile(
                     tileColor: (_selected?['MUSTERI_ID'] == m['MUSTERI_ID']) ? Colors.indigo.withOpacity(.08) : null,
                     leading: const Icon(Icons.person),
