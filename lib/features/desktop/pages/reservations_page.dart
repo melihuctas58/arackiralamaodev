@@ -155,6 +155,15 @@ class _ReservationsPageState extends State<ReservationsPage> {
     }
   }
 
+  Future<void> _approveSelected() async {
+    if (_selected == null) return;
+    try {
+      await _repo.updateStatus(_selected!['REZERVASYON_ID'] as int, 'Onaylandı');
+      await _load();
+      _sn('Rezervasyon onaylandı');
+    } catch (e) { _err(e); }
+  }
+
   void _sn(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
   void _err(Object e) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red));
 
@@ -174,6 +183,12 @@ class _ReservationsPageState extends State<ReservationsPage> {
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (_, i) {
               final m = _items[i];
+              final currentSubeId = Session().current?.subeId ?? 0;
+              final alisSubeId = (m['PLANLANAN_ALIS_SUBE_ID'] as int?) ?? 0;
+              final teslimSubeId = (m['PLANLANAN_TESLIM_SUBE_ID'] as int?) ?? 0;
+              final isDifferentBranch = (alisSubeId != currentSubeId) || (teslimSubeId != currentSubeId);
+              final durum = (m['REZERVASYON_DURUMU'] ?? '').toString();
+              
               return Card(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
@@ -183,8 +198,60 @@ class _ReservationsPageState extends State<ReservationsPage> {
                       ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                         leading: const Icon(Icons.event_available),
-                        title: Text('Rez#${m['REZERVASYON_ID']} • ${m['Marka']} ${m['Seri'] ?? ''} ${m['Model']}'),
-                        subtitle: Text('Alış: ${m['PLANLANAN_ALIS_TARIHI']} • Teslim: ${m['PLANLANAN_TESLIM_TARIHI']} • Durum: ${m['REZERVASYON_DURUMU']}'),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text('Rez#${m['REZERVASYON_ID']} • ${m['Marka']} ${m['Seri'] ?? ''} ${m['Model']}'),
+                            ),
+                            if (isDifferentBranch)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.orange),
+                                ),
+                                child: const Text(
+                                  'FARKLI ŞUBE',
+                                  style: TextStyle(
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Alış: ${m['PLANLANAN_ALIS_TARIHI']} • Teslim: ${m['PLANLANAN_TESLIM_TARIHI']}'),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: _getStatusColor(durum).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: _getStatusColor(durum)),
+                                  ),
+                                  child: Text(
+                                    durum.toUpperCase(),
+                                    style: TextStyle(
+                                      color: _getStatusColor(durum),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text('Alış Şube: ${m['ALIS_SUBE_ADI'] ?? '-'}', style: const TextStyle(fontSize: 12)),
+                                const SizedBox(width: 8),
+                                Text('Teslim Şube: ${m['TESLIM_SUBE_ADI'] ?? '-'}', style: const TextStyle(fontSize: 12)),
+                              ],
+                            ),
+                          ],
+                        ),
                         onTap: () => _fill(m),
                       ),
                       Padding(
@@ -194,9 +261,19 @@ class _ReservationsPageState extends State<ReservationsPage> {
                           spacing: 8,
                           overflowSpacing: 8,
                           children: [
-                            FilledButton.icon(onPressed: () => setState(() => _selected = m), icon: const Icon(Icons.edit), label: const Text('Seç')),
-                            FilledButton.icon(onPressed: _selected == null ? null : _saveSelected, icon: const Icon(Icons.save), label: const Text('Güncelle')),
-                            OutlinedButton.icon(onPressed: _selected == null ? null : _deleteSelected, icon: const Icon(Icons.delete), label: const Text('Sil')),
+                            OutlinedButton.icon(onPressed: () => setState(() => _selected = m), icon: const Icon(Icons.edit, size: 18), label: const Text('Seç')),
+                            if (durum == 'Onay Bekliyor')
+                              FilledButton.icon(
+                                onPressed: () {
+                                  setState(() => _selected = m);
+                                  _approveSelected();
+                                },
+                                icon: const Icon(Icons.check_circle, size: 18),
+                                label: const Text('Onayla'),
+                                style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                              ),
+                            FilledButton.icon(onPressed: _selected == null ? null : _saveSelected, icon: const Icon(Icons.save, size: 18), label: const Text('Güncelle')),
+                            OutlinedButton.icon(onPressed: _selected == null ? null : _deleteSelected, icon: const Icon(Icons.delete, size: 18), label: const Text('Sil')),
                           ],
                         ),
                       ),
@@ -263,5 +340,18 @@ class _ReservationsPageState extends State<ReservationsPage> {
         ]),
       )),
     ]);
+  }
+  
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Onaylandı':
+        return Colors.green;
+      case 'Onay Bekliyor':
+        return Colors.orange;
+      case 'İptal':
+        return Colors.red;
+      default:
+        return Colors.blue;
+    }
   }
 }

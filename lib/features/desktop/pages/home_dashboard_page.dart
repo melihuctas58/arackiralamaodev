@@ -76,8 +76,12 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
     try {
       final subeId = Session().current?.subeId;
       if (subeId == null) return;
+      
+      // Run automatic notifications
+      await _notifRepo.runAllAutoNotifications(subeId);
+      
       final rows = await _notifRepo.listByBranch(subeId, onlyUnread: true);
-      router.setUnread(rows. length);
+      router.setUnread(rows.length);
     } catch (_) {}
   }
 
