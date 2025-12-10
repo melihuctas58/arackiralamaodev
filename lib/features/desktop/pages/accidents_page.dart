@@ -23,11 +23,11 @@ class _AccidentsPageState extends State<AccidentsPage> {
   bool _loading = false;
   String? _error;
 
-  String _filterPayStatus = 'Tumu';
-  String _filterHasarTuru = 'Tumu';
-  String _filterSigortaDurumu = 'Tumu';
-  List<String> _hasarTurleri = ['Tumu'];
-  List<String> _sigortaDurumlari = ['Tumu'];
+  String _filterPayStatus = 'Tümü'; // Tümü, Ödendi, Kısmi, Ödenmedi
+  String _filterHasarTuru = 'Tümü';
+  String _filterSigortaDurumu = 'Tümü';
+  List<String> _hasarTurleri = ['Tümü'];
+  List<String> _sigortaDurumlari = ['Tümü'];
 
   Map<String, dynamic>? selRental;
   final fTarih = TextEditingController(text: DateTime.now().toString().substring(0, 10));
@@ -50,15 +50,19 @@ class _AccidentsPageState extends State<AccidentsPage> {
     try {
       _items = await _repo.listByBranch(Session().current!.subeId, q: _q.text.trim());
 
-      final hasarSet = <String>{'Tumu'};
-      final sigortaSet = <String>{'Tumu'};
+      // Ceza türlerini topla
+      final turler = <String>{'Tümü'};
       for (final m in _items) {
-        final ht = (m['HASAR_TURU'] ??  '').toString();
+        final tur = (m['HASAR_TURU'] ??  '').toString();
+        if (tur. isNotEmpty) turler.add(tur);
+      }
+      _hasarTurleri = turler. toList()..sort();
+      
+      final sigortaSet = <String>{'Tümü'};
+      for (final m in _items) {
         final sd = (m['SIGORTA_DURUMU'] ??  '').toString();
-        if (ht. isNotEmpty) hasarSet.add(ht);
         if (sd.isNotEmpty) sigortaSet.add(sd);
       }
-      _hasarTurleri = hasarSet. toList()..sort();
       _sigortaDurumlari = sigortaSet.toList()..sort();
 
       _applyFilters();
@@ -72,18 +76,18 @@ class _AccidentsPageState extends State<AccidentsPage> {
   void _applyFilters() {
     _filteredItems = _items.where((m) {
       final payStatus = (m['PAY_STATUS'] ?? 'Yok') as String;
-      if (_filterPayStatus != 'Tumu') {
-        if (_filterPayStatus == 'Odendi' && payStatus != 'Odendi') return false;
-        if (_filterPayStatus == 'Kismi' && payStatus != 'Kismi') return false;
-        if (_filterPayStatus == 'Odenmedi' && payStatus != 'Yok') return false;
+      if (_filterPayStatus != 'Tümü') {
+        if (_filterPayStatus == 'Ödendi' && payStatus != 'Ödendi') return false;
+        if (_filterPayStatus == 'Kısmi' && payStatus != 'Kısmi') return false;
+        if (_filterPayStatus == 'Ödenmedi' && payStatus != 'Yok') return false;
       }
 
-      if (_filterHasarTuru != 'Tumu') {
+      if (_filterHasarTuru != 'Tümü') {
         final ht = (m['HASAR_TURU'] ?? '').toString();
         if (ht != _filterHasarTuru) return false;
       }
 
-      if (_filterSigortaDurumu != 'Tumu') {
+      if (_filterSigortaDurumu != 'Tümü') {
         final sd = (m['SIGORTA_DURUMU'] ?? '').toString();
         if (sd != _filterSigortaDurumu) return false;
       }
@@ -179,10 +183,55 @@ class _AccidentsPageState extends State<AccidentsPage> {
       return;
     }
 
+    // Ödeme tipi seçimi
+    String? selectedTip;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        String tempTip = 'Nakit';
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Ödeme Tipi Seçiniz'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Kalan Tutar: ${kalan.toStringAsFixed(2)} TL'),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: tempTip,
+                  decoration: const InputDecoration(
+                    labelText: 'Ödeme Tipi',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: ['Nakit', 'Havale', 'Kredi Kartı']
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (v) => setState(() => tempTip = v ?? 'Nakit'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('İptal'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(tempTip),
+                child: const Text('Öde'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    
+    if (result == null) return;
+    selectedTip = result;
+
     try {
-      await _payRepo.add(kazaId:  kazaId, tutar: kalan, tur: 'Kaza', tipi: 'Nakit');
+      await _payRepo.add(kazaId: kazaId, tutar: kalan, tur: 'Kaza', tipi: selectedTip);
       await _load();
-      _sn('Kaza icin ${kalan. toStringAsFixed(2)} TL odeme eklendi');
+      _sn('Kaza için ${kalan.toStringAsFixed(2)} TL ($selectedTip) ödeme eklendi');
     } catch (e) {
       _err(e);
     }
@@ -190,22 +239,22 @@ class _AccidentsPageState extends State<AccidentsPage> {
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'Odendi':
+      case 'Ödendi':
         return Colors.green;
-      case 'Kismi':
+      case 'Kısmi':
         return Colors.orange;
-      default:
+      default: // 'Yok' or anything else = not paid
         return Colors.red;
     }
   }
 
   IconData _getStatusIcon(String status) {
     switch (status) {
-      case 'Odendi':
+      case 'Ödendi':
         return Icons.check_circle;
-      case 'Kismi':
+      case 'Kısmi':
         return Icons.hourglass_bottom;
-      default:
+      default: // 'Yok' = not paid
         return Icons.cancel;
     }
   }
@@ -245,34 +294,34 @@ class _AccidentsPageState extends State<AccidentsPage> {
               children: [
                 const Text('Filtreler:', style: TextStyle(fontWeight:  FontWeight.bold)),
                 Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Text('Odeme:  '),
+                  const Text('Ödeme: '),
                   DropdownButton<String>(
                     value: _filterPayStatus,
-                    items: ['Tumu', 'Odendi', 'Kismi', 'Odenmedi'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                    items: ['Tümü', 'Ödendi', 'Kısmi', 'Ödenmedi'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                     onChanged: (v) {
-                      _filterPayStatus = v ??  'Tumu';
+                      setState(() => _filterPayStatus = v ?? 'Tümü');
                       _applyFilters();
                     },
                   ),
                 ]),
                 Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Text('Hasar:  '),
+                  const Text('Hasar: '),
                   DropdownButton<String>(
-                    value: _hasarTurleri.contains(_filterHasarTuru) ? _filterHasarTuru : 'Tumu',
+                    value: _hasarTurleri.contains(_filterHasarTuru) ? _filterHasarTuru : 'Tümü',
                     items: _hasarTurleri.map((e) => DropdownMenuItem(value: e, child: Text(e. length > 15 ? '${e.substring(0, 15)}...' : e))).toList(),
                     onChanged:  (v) {
-                      _filterHasarTuru = v ?? 'Tumu';
+                      setState(() => _filterHasarTuru = v ?? 'Tümü');
                       _applyFilters();
                     },
                   ),
                 ]),
                 Row(mainAxisSize: MainAxisSize. min, children: [
-                  const Text('Sigorta:  '),
+                  const Text('Sigorta: '),
                   DropdownButton<String>(
-                    value: _sigortaDurumlari.contains(_filterSigortaDurumu) ? _filterSigortaDurumu : 'Tumu',
+                    value: _sigortaDurumlari.contains(_filterSigortaDurumu) ? _filterSigortaDurumu : 'Tümü',
                     items: _sigortaDurumlari.map((e) => DropdownMenuItem(value: e, child: Text(e.length > 15 ? '${e. substring(0, 15)}...' : e))).toList(),
                     onChanged: (v) {
-                      _filterSigortaDurumu = v ??  'Tumu';
+                      setState(() => _filterSigortaDurumu = v ?? 'Tümü');
                       _applyFilters();
                     },
                   ),
@@ -317,12 +366,12 @@ class _AccidentsPageState extends State<AccidentsPage> {
                                         border: Border.all(color: statusColor),
                                       ),
                                       child: Text(
-                                        payStatus == 'Yok' ? 'ODENMEDI' : payStatus. toUpperCase(),
+                                        payStatus == 'Yok' ? 'ÖDENMEDİ' : payStatus.toUpperCase(),
                                         style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    Text('Odenen: ${paidTotal.toStringAsFixed(2)} TL', style: const TextStyle(fontSize: 12)),
+                                    Text('Ödenen: ${paidTotal.toStringAsFixed(2)} TL', style: const TextStyle(fontSize: 12)),
                                     if (kalan > 0) ...[
                                       const SizedBox(width: 8),
                                       Text('Kalan: ${kalan.toStringAsFixed(2)} TL', style: TextStyle(fontSize: 12, color: Colors.red. shade700, fontWeight: FontWeight.bold)),

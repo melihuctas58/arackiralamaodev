@@ -174,17 +174,47 @@ class _ReservationsPageState extends State<ReservationsPage> {
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (_, i) {
               final m = _items[i];
+              final currentSubeId = Session().current!.subeId;
+              final alisSubeId = m['ALIS_SUBE_ID'] as int?;
+              final isFromOtherBranch = alisSubeId != null && alisSubeId != currentSubeId;
+              final subeAdi = m['ALIS_SUBE_ADI'] ?? '-';
+              
               return Card(
+                color: isFromOtherBranch ? Colors.orange.shade50 : null,
+                elevation: isFromOtherBranch ? 4 : 1,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (isFromOtherBranch)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          color: Colors.orange.shade700,
+                          child: Row(
+                            children: [
+                              const Icon(Icons.warning, color: Colors.white, size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                'BAŞKA ŞUBEDEN: $subeAdi',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                        leading: const Icon(Icons.event_available),
+                        leading: Icon(
+                          Icons.event_available,
+                          color: isFromOtherBranch ? Colors.orange.shade700 : null,
+                        ),
                         title: Text('Rez#${m['REZERVASYON_ID']} • ${m['Marka']} ${m['Seri'] ?? ''} ${m['Model']}'),
-                        subtitle: Text('Alış: ${m['PLANLANAN_ALIS_TARIHI']} • Teslim: ${m['PLANLANAN_TESLIM_TARIHI']} • Durum: ${m['REZERVASYON_DURUMU']}'),
+                        subtitle: Text('Alış: ${m['PLANLANAN_ALIS_TARIHI']} • Teslim: ${m['PLANLANAN_TESLIM_TARIHI']} • Durum: ${m['REZERVASYON_DURUMU']}${isFromOtherBranch ? '\nAlış Şube: $subeAdi' : ''}'),
                         onTap: () => _fill(m),
                       ),
                       Padding(

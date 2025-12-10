@@ -101,11 +101,57 @@ class _InsurancesPageState extends State<InsurancesPage> {
   Future<void> _quickPay() async {
     final tutar = double.tryParse(fMaliyet.text);
     if (tutar == null || tutar <= 0) { _sn('Maliyet tutarı yok'); return; }
+    
+    // Ödeme tipi seçimi
+    String? selectedTip;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        String tempTip = 'Nakit';
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Ödeme Tipi Seçiniz'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Tutar: ${tutar.toStringAsFixed(2)} TL'),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: tempTip,
+                  decoration: const InputDecoration(
+                    labelText: 'Ödeme Tipi',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: ['Nakit', 'Havale', 'Kredi Kartı']
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (v) => setState(() => tempTip = v ?? 'Nakit'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('İptal'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(tempTip),
+                child: const Text('Öde'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    
+    if (result == null) return;
+    selectedTip = result;
+    
     try {
       final sigId = _selected?['SIGORTA_ID'] as int?;
       if (sigId == null) { _sn('Önce bir sigorta kaydı seçin'); return; }
-      await _payRepo.add(tutar: tutar, tur: 'Sigorta', tipi: 'Nakit', sigortaId: sigId);
-      _sn('Sigorta için ödeme eklendi');
+      await _payRepo.add(tutar: tutar, tur: 'Sigorta', tipi: selectedTip, sigortaId: sigId);
+      _sn('Sigorta için ödeme eklendi ($selectedTip)');
       UiRouter().go(11, max: 15);
       await _load();
     } catch (e) { _err(e); }

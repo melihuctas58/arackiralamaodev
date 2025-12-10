@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import '../../../data/repositories/employee_repository.dart';
 import '../../../models/session.dart';
+import '../../../security/password_service.dart';
 
 class EmployeesPage extends StatefulWidget { const EmployeesPage({super.key}); @override State<EmployeesPage> createState() => _EmployeesPageState(); }
 class _EmployeesPageState extends State<EmployeesPage> {
   final _repo = EmployeeRepository();
+  final _passwordService = PasswordService();
   final _q = TextEditingController();
   List<Map<String, dynamic>> _items = [];
   Map<String, dynamic>? _selected;
   bool _loading = true;
   String? _error;
+  bool _isAuthenticated = false;
 
   final fTc = TextEditingController();
   final fEmail = TextEditingController();
@@ -19,7 +22,27 @@ class _EmployeesPageState extends State<EmployeesPage> {
   final fPoz = TextEditingController();
   final fDurum = TextEditingController(text: 'Aktif');
 
-  @override void initState() { super.initState(); _load(); }
+  @override
+  void initState() {
+    super.initState();
+    _checkPassword();
+  }
+
+  Future<void> _checkPassword() async {
+    final isAuthenticated = await PasswordService.showPasswordDialog(
+      context,
+      title: 'Çalışanlar Sayfası',
+      description: '2. Şifre (Yönetici/Üst Rütbe) ile giriş yapınız',
+      verifyPassword: _passwordService.verifyPassword2,
+    );
+    
+    if (isAuthenticated) {
+      setState(() => _isAuthenticated = true);
+      _load();
+    } else {
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; _selected = null; });
@@ -83,6 +106,10 @@ class _EmployeesPageState extends State<EmployeesPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isAuthenticated) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
     return Row(children: [
       Expanded(flex: 2, child: Column(children: [
         Padding(padding: const EdgeInsets.all(12), child: Row(children: [
