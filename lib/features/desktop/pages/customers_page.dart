@@ -85,18 +85,13 @@ class _CustomersPageState extends State<CustomersPage> {
         adres: fAdres.text.trim().isEmpty ? null : fAdres.text.trim(),
       );
       
-      // Log the action
+      // Log the action (without sensitive data like TC)
       await _logsRepo.add(
         subeId: Session().current!.subeId,
         calisanId: Session().current?.calisanId,
         action: 'MUSTERI_EKLE',
         message: 'Müşteri eklendi: ${fAd.text.trim()} ${fSoyad.text.trim()}',
         relatedType: 'MUSTERI',
-        details: {
-          'TC': fTc.text.trim(),
-          'AD': fAd.text.trim(),
-          'SOYAD': fSoyad.text.trim(),
-        },
       );
       
       _clear(); await _load();
