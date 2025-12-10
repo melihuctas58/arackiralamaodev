@@ -139,7 +139,7 @@ class _PasswordManagementPageState extends State<PasswordManagementPage> {
         calisanId: Session().current!.calisanId,
         action: 'SIFRE_DEGISTIRME',
         message: '2. Şifre (Yönetici/Üst Rütbe) değiştirildi',
-        details: {'sifre_turu': '2. Şifre (Yönetici)'},
+        details: {'sifre_turu': '2. Şifre (Yönetici/Üst Rütbe)'},
       );
 
       _oldPassword2Ctrl.clear();

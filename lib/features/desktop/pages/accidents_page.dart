@@ -231,7 +231,7 @@ class _AccidentsPageState extends State<AccidentsPage> {
     try {
       await _payRepo.add(kazaId: kazaId, tutar: kalan, tur: 'Kaza', tipi: selectedTip);
       await _load();
-      _sn('Kaza icin ${kalan.toStringAsFixed(2)} TL ($selectedTip) odeme eklendi');
+      _sn('Kaza için ${kalan.toStringAsFixed(2)} TL ($selectedTip) ödeme eklendi');
     } catch (e) {
       _err(e);
     }
