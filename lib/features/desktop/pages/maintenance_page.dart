@@ -14,10 +14,17 @@ class _MaintenancePageState extends State<MaintenancePage> {
   final _q = TextEditingController();
 
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
   List<Map<String, dynamic>> _itemsForSelectedCar = [];
   Map<String, dynamic>? _selected;
   bool _loading = false;
   String? _error;
+
+  // Filtreler
+  String _filterPayStatus = 'Tümü'; // Tümü, Ödendi, Kısmi, Ödenmedi
+  String _filterParca = 'Tümü'; // Tümü, Parça Değişimi Var, Parça Değişimi Yok
+  String _filterTur = 'Tümü';
+  List<String> _turler = ['Tümü'];
 
   Map<String, dynamic>? selArac;
   final fTarih = TextEditingController(text: DateTime.now().toString().substring(0,10));
@@ -30,8 +37,45 @@ class _MaintenancePageState extends State<MaintenancePage> {
     setState(() { _loading = true; _error = null; _selected = null; });
     try {
       _items = await _repo.listByBranch(Session().current!.subeId, q: _q.text.trim());
+      
+      // Bakım türlerini topla
+      final turler = <String>{'Tümü'};
+      for (final m in _items) {
+        final tur = (m['BAKIM_TURU'] ?? '').toString();
+        if (tur.isNotEmpty) turler.add(tur);
+      }
+      _turler = turler.toList()..sort();
+      
       await _refreshSelectedCarList();
+      _applyFilters();
     } catch (e) { _error = e.toString(); } finally { setState(() => _loading = false); }
+  }
+
+  void _applyFilters() {
+    _filteredItems = _items.where((m) {
+      // Ödeme durumu filtresi (hesaplanacak)
+      if (_filterPayStatus != 'Tümü') {
+        final ucret = (m['BAKIM_UCRETI'] as num?)?.toDouble() ?? 0.0;
+        // Note: PAID_TOTAL will be calculated in FutureBuilder, so we can't filter here
+        // We'll apply this filter in the display logic instead
+      }
+      
+      // Parça değişimi filtresi
+      if (_filterParca != 'Tümü') {
+        final parcaDegisti = ((m['PARCA_DEGISTIMI'] ?? 0) == 1);
+        if (_filterParca == 'Parça Değişimi Var' && !parcaDegisti) return false;
+        if (_filterParca == 'Parça Değişimi Yok' && parcaDegisti) return false;
+      }
+      
+      // Tür filtresi
+      if (_filterTur != 'Tümü') {
+        final tur = (m['BAKIM_TURU'] ?? '').toString();
+        if (tur != _filterTur) return false;
+      }
+      
+      return true;
+    }).toList();
+    setState(() {});
   }
 
   Future<void> _refreshSelectedCarList() async {
@@ -145,15 +189,27 @@ class _MaintenancePageState extends State<MaintenancePage> {
       m['PAY_STATUS'] = _payStatusFor({...m, 'PAID_TOTAL': paid});
       list.add(m);
     }
+    
+    // Apply payment status filter
+    final filtered = list.where((m) {
+      if (_filterPayStatus != 'Tümü') {
+        final status = (m['PAY_STATUS'] ?? 'Yok') as String;
+        if (_filterPayStatus == 'Ödendi' && status != 'Ödendi') return false;
+        if (_filterPayStatus == 'Kısmi' && status != 'Kısmi') return false;
+        if (_filterPayStatus == 'Ödenmedi' && status != 'Yok') return false;
+      }
+      return true;
+    }).toList();
+    
     // ödenmemişler → ödenmişler sıralaması
-    list.sort((a,b) {
+    filtered.sort((a,b) {
       final sa = (a['PAY_STATUS'] ?? 'Yok') as String;
       final sb = (b['PAY_STATUS'] ?? 'Yok') as String;
       final ra = sa == 'Ödendi' ? 1 : 0;
       final rb = sb == 'Ödendi' ? 1 : 0;
       return ra.compareTo(rb);
     });
-    return list;
+    return filtered;
   }
 
   void _sn(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
@@ -161,13 +217,55 @@ class _MaintenancePageState extends State<MaintenancePage> {
 
   @override
   Widget build(BuildContext context) {
-    final baseList = (_itemsForSelectedCar.isNotEmpty) ? _itemsForSelectedCar : _items;
+    final baseList = (_itemsForSelectedCar.isNotEmpty) ? _itemsForSelectedCar : _filteredItems;
     return Row(children: [
       Expanded(flex: 2, child: Column(children: [
         Padding(padding: const EdgeInsets.all(12), child: Row(children: [
           Expanded(child: TextField(controller: _q, decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Bakım / Araç / Parça ara...'), onSubmitted: (_) => _load())),
           const SizedBox(width: 8), FilledButton(onPressed: _load, child: const Text('Yenile')),
         ])),
+        
+        // Filtreler
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(children: [
+            const Text('Filtreler: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            
+            // Ödeme Durumu Filtresi
+            DropdownButton<String>(
+              value: _filterPayStatus,
+              items: ['Tümü', 'Ödendi', 'Kısmi', 'Ödenmedi'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterPayStatus = v ?? 'Tümü');
+              },
+            ),
+            const SizedBox(width: 16),
+            
+            // Parça Değişimi Filtresi
+            DropdownButton<String>(
+              value: _filterParca,
+              items: ['Tümü', 'Parça Değişimi Var', 'Parça Değişimi Yok'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterParca = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            const SizedBox(width: 16),
+            
+            // Tür Filtresi
+            DropdownButton<String>(
+              value: _turler.contains(_filterTur) ? _filterTur : 'Tümü',
+              items: _turler.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterTur = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        
         Expanded(
           child: _loading ? const Center(child: CircularProgressIndicator()) : _error != null ? Center(child: Text('Hata: $_error')) :
           FutureBuilder<List<Map<String, dynamic>>>(
@@ -175,28 +273,71 @@ class _MaintenancePageState extends State<MaintenancePage> {
             builder: (ctx, snap) {
               if (!snap.hasData) return const Center(child: LinearProgressIndicator());
               final list = snap.data!;
-              return ListView.separated(
-                padding: const EdgeInsets.all(12),
-                itemCount: list.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (_, i) {
-                  final m = list[i];
-                  final status = (m['PAY_STATUS'] ?? 'Yok') as String;
-                  final color = _statusColor(status);
-                  final paid = (m['PAID_TOTAL'] as num?)?.toDouble() ?? 0.0;
-                  return Card(child: ListTile(
-                    leading: const Icon(Icons.build),
-                    title: Text('Bakım#${m['BAKIM_ID']} • ${m['PLAKA'] ?? '-'} • ${m['Marka'] ?? '-'} ${m['Seri'] ?? ''} ${m['Model'] ?? ''}'),
-                    subtitle: Text('Tarih: ${m['BAKIM_TARIHI']} • Tür: ${m['BAKIM_TURU'] ?? '-'} • Ücret: ${m['BAKIM_UCRETI'] ?? '-'} • Ödenen: ${paid.toStringAsFixed(2)}'),
-                    trailing: Wrap(spacing: 6, runSpacing: 6, children: [
-                      Chip(label: Text(status), backgroundColor: color.withOpacity(0.1), labelStyle: TextStyle(color: color)),
-                      OutlinedButton.icon(onPressed: () => _fill(m), icon: const Icon(Icons.edit), label: const Text('Düzenle')),
-                      FilledButton.icon(onPressed: () { _fill(m); _quickPay(); }, icon: const Icon(Icons.payments), label: const Text('Öde')),
-                      OutlinedButton.icon(onPressed: () { _fill(m); _delete(); }, icon: const Icon(Icons.delete), label: const Text('Sil')),
-                    ]),
-                    onTap: () => _fill(m),
-                  ));
-                },
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text('${list.length} kayıt', style: const TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: list.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) {
+                        final m = list[i];
+                        final status = (m['PAY_STATUS'] ?? 'Yok') as String;
+                        final color = _statusColor(status);
+                        final paid = (m['PAID_TOTAL'] as num?)?.toDouble() ?? 0.0;
+                        final ucret = (m['BAKIM_UCRETI'] as num?)?.toDouble() ?? 0.0;
+                        final kalan = ucret - paid;
+                        
+                        return Card(child: ListTile(
+                          leading: const Icon(Icons.build),
+                          title: Text('Bakım#${m['BAKIM_ID']} • ${m['PLAKA'] ?? '-'} • ${m['Marka'] ?? '-'} ${m['Seri'] ?? ''} ${m['Model'] ?? ''}'),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Tarih: ${m['BAKIM_TARIHI']} • Tür: ${m['BAKIM_TURU'] ?? '-'} • Ücret: ${ucret.toStringAsFixed(2)} TL'),
+                              Row(children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: color.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: color),
+                                  ),
+                                  child: Text(
+                                    status == 'Yok' ? 'ÖDENMEDİ' : status.toUpperCase(),
+                                    style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text('Ödenen: ${paid.toStringAsFixed(2)} TL', style: const TextStyle(fontSize: 12)),
+                                if (kalan > 0) ...[
+                                  const SizedBox(width: 8),
+                                  Text('Kalan: ${kalan.toStringAsFixed(2)} TL', style: TextStyle(fontSize: 12, color: Colors.red.shade700, fontWeight: FontWeight.bold)),
+                                ],
+                              ]),
+                            ],
+                          ),
+                          trailing: Wrap(spacing: 6, runSpacing: 6, children: [
+                            OutlinedButton.icon(onPressed: () => _fill(m), icon: const Icon(Icons.edit, size: 18), label: const Text('Düzenle')),
+                            if (kalan > 0)
+                              FilledButton.icon(onPressed: () { _fill(m); _quickPay(); }, icon: const Icon(Icons.payments, size: 18), label: const Text('Öde')),
+                            OutlinedButton.icon(onPressed: () { _fill(m); _delete(); }, icon: const Icon(Icons.delete, size: 18), label: const Text('Sil')),
+                          ]),
+                          onTap: () => _fill(m),
+                        ));
+                      },
+                    ),
+                  ),
+                ],
               );
             },
           ),
