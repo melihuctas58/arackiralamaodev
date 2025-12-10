@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../data/repositories/logs_repository.dart';
 import '../../../models/session.dart';
 
@@ -6,9 +7,39 @@ class LogsPage extends StatefulWidget { const LogsPage({super.key}); @override S
 class _LogsPageState extends State<LogsPage> {
   final _repo = LogsRepository();
   final _q = TextEditingController();
+  final _passCtrl = TextEditingController();
   List<Map<String, dynamic>> _items = [];
   Map<String, dynamic>? _selected;
   String? _error; bool _loading = false;
+  bool _authenticated = false;
+  bool _showPassword = false;
+
+  @override
+  void dispose() {
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _verifyPassword() async {
+    final pass = _passCtrl.text.trim();
+    if (pass.isEmpty) {
+      setState(() => _error = 'Şifre giriniz');
+      return;
+    }
+    
+    final prefs = await SharedPreferences.getInstance();
+    final savedPass = prefs.getString('app_password') ?? '0000';
+    
+    if (pass == savedPass) {
+      setState(() {
+        _authenticated = true;
+        _error = null;
+      });
+      await _load();
+    } else {
+      setState(() => _error = 'Şifre yanlış');
+    }
+  }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; _selected = null; _items = []; });
@@ -16,10 +47,60 @@ class _LogsPageState extends State<LogsPage> {
     catch (e) { _error = e.toString(); } finally { setState(() => _loading = false); }
   }
 
-  @override void initState() { super.initState(); _load(); }
+  @override void initState() { super.initState(); }
 
   @override
   Widget build(BuildContext context) {
+    if (!_authenticated) {
+      return Center(
+        child: Card(
+          elevation: 4,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock, size: 64, color: Colors.indigo),
+                const SizedBox(height: 16),
+                const Text('Loglar Sayfası', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                const Text('Bu sayfaya erişmek için temel şifre gereklidir.', style: TextStyle(color: Colors.grey)),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: _passCtrl,
+                  obscureText: !_showPassword,
+                  decoration: InputDecoration(
+                    labelText: 'Temel Şifre',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.password),
+                    suffixIcon: IconButton(
+                      icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setState(() => _showPassword = !_showPassword),
+                    ),
+                  ),
+                  onSubmitted: (_) => _verifyPassword(),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_error!, style: const TextStyle(color: Colors.red)),
+                ],
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _verifyPassword,
+                    icon: const Icon(Icons.login),
+                    label: const Text('Giriş Yap'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    
     return Row(children: [
       Expanded(flex: 2, child: Column(children: [
         Padding(padding: const EdgeInsets.all(12), child: Row(children: [
