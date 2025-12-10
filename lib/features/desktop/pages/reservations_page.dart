@@ -174,7 +174,16 @@ class _ReservationsPageState extends State<ReservationsPage> {
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (_, i) {
               final m = _items[i];
+              final mySube = Session().current!.subeId;
+              final alisSube = m['ALIS_SUBE_ID'] as int?;
+              final teslimSube = m['TESLIM_SUBE_ID'] as int?;
+              final isDifferentBranch = (alisSube != null && alisSube != mySube) || (teslimSube != null && teslimSube != mySube);
+              final status = (m['REZERVASYON_DURUMU'] ?? '').toString();
+              final canApprove = status.toLowerCase() == 'onay bekliyor';
+              
               return Card(
+                color: isDifferentBranch ? Colors.orange.shade50 : null,
+                elevation: isDifferentBranch ? 4 : 1,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Column(
@@ -182,9 +191,42 @@ class _ReservationsPageState extends State<ReservationsPage> {
                     children: [
                       ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                        leading: const Icon(Icons.event_available),
-                        title: Text('Rez#${m['REZERVASYON_ID']} • ${m['Marka']} ${m['Seri'] ?? ''} ${m['Model']}'),
-                        subtitle: Text('Alış: ${m['PLANLANAN_ALIS_TARIHI']} • Teslim: ${m['PLANLANAN_TESLIM_TARIHI']} • Durum: ${m['REZERVASYON_DURUMU']}'),
+                        leading: Icon(
+                          isDifferentBranch ? Icons.swap_horiz : Icons.event_available,
+                          color: isDifferentBranch ? Colors.orange : null,
+                          size: 32,
+                        ),
+                        title: Row(
+                          children: [
+                            Expanded(child: Text('Rez#${m['REZERVASYON_ID']} • ${m['Marka']} ${m['Seri'] ?? ''} ${m['Model']}')),
+                            if (isDifferentBranch)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'FARKLI ŞUBE',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10),
+                                ),
+                              ),
+                          ],
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Alış: ${m['PLANLANAN_ALIS_TARIHI']} • Teslim: ${m['PLANLANAN_TESLIM_TARIHI']}'),
+                            Text('Durum: $status • Müşteri: ${m['MusteriAd'] ?? '-'} ${m['MusteriSoyad'] ?? '-'}'),
+                            if (isDifferentBranch) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Alış Şube: ${m['AlisSubeAdi'] ?? '-'} • Teslim Şube: ${m['TeslimSubeAdi'] ?? '-'}',
+                                style: TextStyle(color: Colors.orange.shade700, fontWeight: FontWeight.bold, fontSize: 12),
+                              ),
+                            ],
+                          ],
+                        ),
                         onTap: () => _fill(m),
                       ),
                       Padding(
@@ -194,9 +236,25 @@ class _ReservationsPageState extends State<ReservationsPage> {
                           spacing: 8,
                           overflowSpacing: 8,
                           children: [
-                            FilledButton.icon(onPressed: () => setState(() => _selected = m), icon: const Icon(Icons.edit), label: const Text('Seç')),
-                            FilledButton.icon(onPressed: _selected == null ? null : _saveSelected, icon: const Icon(Icons.save), label: const Text('Güncelle')),
-                            OutlinedButton.icon(onPressed: _selected == null ? null : _deleteSelected, icon: const Icon(Icons.delete), label: const Text('Sil')),
+                            FilledButton.icon(onPressed: () => setState(() => _selected = m), icon: const Icon(Icons.edit, size: 18), label: const Text('Seç')),
+                            if (canApprove)
+                              FilledButton.icon(
+                                onPressed: () async {
+                                  setState(() => _selected = m);
+                                  try {
+                                    await _repo.updateStatus(m['REZERVASYON_ID'] as int, 'Onaylandı');
+                                    await _load();
+                                    _sn('Rezervasyon onaylandı');
+                                  } catch (e) {
+                                    _err(e);
+                                  }
+                                },
+                                style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                                icon: const Icon(Icons.check_circle, size: 18),
+                                label: const Text('Onayla'),
+                              ),
+                            FilledButton.icon(onPressed: _selected == null ? null : _saveSelected, icon: const Icon(Icons.save, size: 18), label: const Text('Güncelle')),
+                            OutlinedButton.icon(onPressed: _selected == null ? null : _deleteSelected, icon: const Icon(Icons.delete, size: 18), label: const Text('Sil')),
                           ],
                         ),
                       ),

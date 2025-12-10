@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../data/repositories/customer_repository.dart';
+import '../../../data/repositories/logs_repository.dart';
+import '../../../models/session.dart';
 
 class CustomersPage extends StatefulWidget {
   const CustomersPage({super.key});
@@ -9,12 +11,17 @@ class CustomersPage extends StatefulWidget {
 
 class _CustomersPageState extends State<CustomersPage> {
   final _repo = CustomerRepository();
+  final _logsRepo = LogsRepository();
   final _q = TextEditingController();
 
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
   Map<String, dynamic>? _selected;
   bool _loading = true;
   String? _error;
+  
+  // Filters
+  String _filterDurum = 'Tümü';
 
   final fTc = TextEditingController();
   final fEhliyet = TextEditingController();
@@ -33,8 +40,20 @@ class _CustomersPageState extends State<CustomersPage> {
     try {
       final all = await _repo.listAll(q: _q.text.trim().isEmpty ? null : _q.text.trim());
       _items = all;
+      _applyFilters();
     } catch (e) { _error = e.toString(); }
     finally { setState(() => _loading = false); }
+  }
+
+  void _applyFilters() {
+    _filteredItems = _items.where((m) {
+      if (_filterDurum != 'Tümü') {
+        final durum = (m['DURUM'] ?? 'Aktif').toString();
+        if (durum != _filterDurum) return false;
+      }
+      return true;
+    }).toList();
+    setState(() {});
   }
 
   void _fill(Map<String, dynamic> m) {
@@ -65,6 +84,16 @@ class _CustomersPageState extends State<CustomersPage> {
         email: fEmail.text.trim(),
         adres: fAdres.text.trim().isEmpty ? null : fAdres.text.trim(),
       );
+      
+      // Log the action (without sensitive data like TC)
+      await _logsRepo.add(
+        subeId: Session().current!.subeId,
+        calisanId: Session().current?.calisanId,
+        action: 'MUSTERI_EKLE',
+        message: 'Müşteri eklendi: ${fAd.text.trim()} ${fSoyad.text.trim()}',
+        relatedType: 'MUSTERI',
+      );
+      
       _clear(); await _load();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Müşteri eklendi')));
     } catch (e) { if (mounted) _err(e); }
@@ -73,13 +102,25 @@ class _CustomersPageState extends State<CustomersPage> {
   Future<void> _update() async {
     if (_selected == null) return;
     try {
+      final musteriId = _selected!['MUSTERI_ID'] as int;
       await _repo.update(
-        id: _selected!['MUSTERI_ID'] as int,
+        id: musteriId,
         tel: fTel.text.trim().isEmpty ? null : fTel.text.trim(),
         email: fEmail.text.trim().isEmpty ? null : fEmail.text.trim(),
         adres: fAdres.text.trim().isEmpty ? null : fAdres.text.trim(),
         durum: fDurum.text.trim().isEmpty ? null : fDurum.text.trim(),
       );
+      
+      // Log the action
+      await _logsRepo.add(
+        subeId: Session().current!.subeId,
+        calisanId: Session().current?.calisanId,
+        action: 'MUSTERI_GUNCELLE',
+        message: 'Müşteri güncellendi: ${fAd.text.trim()} ${fSoyad.text.trim()}',
+        relatedType: 'MUSTERI',
+        relatedId: musteriId,
+      );
+      
       await _load();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Müşteri güncellendi')));
     } catch (e) { if (mounted) _err(e); }
@@ -88,7 +129,19 @@ class _CustomersPageState extends State<CustomersPage> {
   Future<void> _delete() async {
     if (_selected == null) return;
     try {
-      await _repo.deleteSoft(_selected!['MUSTERI_ID'] as int);
+      final musteriId = _selected!['MUSTERI_ID'] as int;
+      await _repo.deleteSoft(musteriId);
+      
+      // Log the action
+      await _logsRepo.add(
+        subeId: Session().current!.subeId,
+        calisanId: Session().current?.calisanId,
+        action: 'MUSTERI_SIL',
+        message: 'Müşteri silindi (soft): ${fAd.text.trim()} ${fSoyad.text.trim()}',
+        relatedType: 'MUSTERI',
+        relatedId: musteriId,
+      );
+      
       _clear(); await _load();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Müşteri silindi (soft)')));
     } catch (e) { if (mounted) _err(e); }
@@ -116,15 +169,33 @@ class _CustomersPageState extends State<CustomersPage> {
             OutlinedButton(onPressed: () { _q.clear(); _load(); }, child: const Text('Temizle')),
           ]),
         ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(children: [
+            const Text('Filtreler: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            DropdownButton<String>(
+              value: _filterDurum,
+              items: ['Tümü', 'Aktif', 'Pasif'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterDurum = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            const Spacer(),
+            Text('${_filteredItems.length} / ${_items.length} kayıt', style: const TextStyle(color: Colors.grey)),
+          ]),
+        ),
+        const SizedBox(height: 8),
         Expanded(
           child: _loading ? const Center(child: CircularProgressIndicator())
             : _error != null ? Center(child: Text('Hata: $_error'))
             : ListView.separated(
                 padding: const EdgeInsets.all(12),
-                itemCount: _items.length,
+                itemCount: _filteredItems.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
-                  final m = _items[i];
+                  final m = _filteredItems[i];
                   return ListTile(
                     tileColor: (_selected?['MUSTERI_ID'] == m['MUSTERI_ID']) ? Colors.indigo.withOpacity(.08) : null,
                     leading: const Icon(Icons.person),
