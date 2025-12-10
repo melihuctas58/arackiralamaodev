@@ -55,14 +55,43 @@ class _PaymentsPageState extends State<PaymentsPage> {
   }
 
   // ödenmiş/ödenmemiş belirgin rozet
-  String _payStatus(Map<String, dynamic> m) {
-    // burada basitçe "Kampanya/Diğer" tipleri için "Bekleyen" gibi düşünebiliriz;
-    // kesin hesaplama gerektiriyorsa kiralama/sigorta/bakım ceza tutarlarına göre ayrıştırma yapılır.
+  String _getPayStatus(Map<String, dynamic> m) {
+    // Önce repository'den gelen PAY_STATUS kullan
+    if (m.containsKey('PAY_STATUS')) {
+      final ps = (m['PAY_STATUS'] ?? 'Diğer') as String;
+      return ps;
+    }
+    // Fallback
     final tip = (m['ODEME_TIPI'] ?? '') as String;
-    if (tip.toLowerCase() == 'kampanya' || tip.toLowerCase() == 'diğer' || tip.toLowerCase() == 'diger') return 'Bekleyen';
-    return 'Ödenmiş';
+    if (tip.toLowerCase() == 'kampanya' || tip.toLowerCase() == 'diğer' || tip.toLowerCase() == 'diger') return 'Diğer';
+    return 'Ödendi';
   }
-  Color _statusColor(String s) => s == 'Bekleyen' ? Colors.orange : Colors.green;
+  
+  Color _getStatusColor(String s) {
+    switch (s) {
+      case 'Ödendi':
+        return Colors.green;
+      case 'Kısmi':
+        return Colors.orange;
+      case 'Yok':
+        return Colors.red;
+      default:
+        return Colors.blue;
+    }
+  }
+  
+  IconData _getStatusIcon(String s) {
+    switch (s) {
+      case 'Ödendi':
+        return Icons.check_circle;
+      case 'Kısmi':
+        return Icons.hourglass_bottom;
+      case 'Yok':
+        return Icons.cancel;
+      default:
+        return Icons.info;
+    }
+  }
 
   void _sn(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
   void _err(Object e) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red));
@@ -84,14 +113,38 @@ class _PaymentsPageState extends State<PaymentsPage> {
               final m = _items[i];
               final label = (m['ODEME_TURU'] ?? '-') as String;
               final tip = (m['ODEME_TIPI'] ?? '-') as String;
-              final tutar = (m['ODEME_TUTARI'] ?? '-') .toString();
-              final status = _payStatus(m);
-              final color = _statusColor(status);
+              final tutar = (m['ODEME_TUTARI'] as num?)?.toDouble() ?? 0.0;
+              final payStatus = _getPayStatus(m);
+              final statusColor = _getStatusColor(payStatus);
+              
               return Card(child: ListTile(
-                leading: const Icon(Icons.payments),
+                leading: Icon(_getStatusIcon(payStatus), color: statusColor, size: 32),
                 title: Text('Ödeme#${m['ODEME_ID']} • ${m['PLAKA'] ?? '-'} • ${m['Marka'] ?? '-'} ${m['Model'] ?? ''}'),
-                subtitle: Text('Tür: $label • Tip: $tip • Tutar: $tutar'),
-                trailing: Chip(label: Text(status), backgroundColor: color.withOpacity(0.1), labelStyle: TextStyle(color: color)),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Tür: $label • Tip: $tip • Tutar: ${tutar.toStringAsFixed(2)} TL'),
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: statusColor),
+                        ),
+                        child: Text(
+                          payStatus == 'Yok' ? 'ÖDENMEDİ' : payStatus.toUpperCase(),
+                          style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ),
+                    ]),
+                  ],
+                ),
+                trailing: OutlinedButton.icon(
+                  onPressed: () => _fill(m),
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: const Text('Düzenle'),
+                ),
                 onTap: () => _fill(m),
               ));
             },
