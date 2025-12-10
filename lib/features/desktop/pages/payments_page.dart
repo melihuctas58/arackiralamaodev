@@ -62,6 +62,29 @@ class _PaymentsPageState extends State<PaymentsPage> {
     if (tip.toLowerCase() == 'kampanya' || tip.toLowerCase() == 'diğer' || tip.toLowerCase() == 'diger') return 'Bekleyen';
     return 'Ödenmiş';
   }
+  
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Ödenmiş':
+        return Colors.green;
+      case 'Bekleyen':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'Ödenmiş':
+        return Icons.check_circle;
+      case 'Bekleyen':
+        return Icons.hourglass_bottom;
+      default:
+        return Icons.help;
+    }
+  }
+
   Color _statusColor(String s) => s == 'Bekleyen' ? Colors.orange : Colors.green;
 
   void _sn(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
@@ -84,16 +107,37 @@ class _PaymentsPageState extends State<PaymentsPage> {
               final m = _items[i];
               final label = (m['ODEME_TURU'] ?? '-') as String;
               final tip = (m['ODEME_TIPI'] ?? '-') as String;
-              final tutar = (m['ODEME_TUTARI'] ?? '-') .toString();
+              final tutar = (m['ODEME_TUTARI'] as num?)?.toDouble() ?? 0.0;
               final status = _payStatus(m);
-              final color = _statusColor(status);
-              return Card(child: ListTile(
-                leading: const Icon(Icons.payments),
-                title: Text('Ödeme#${m['ODEME_ID']} • ${m['PLAKA'] ?? '-'} • ${m['Marka'] ?? '-'} ${m['Model'] ?? ''}'),
-                subtitle: Text('Tür: $label • Tip: $tip • Tutar: $tutar'),
-                trailing: Chip(label: Text(status), backgroundColor: color.withOpacity(0.1), labelStyle: TextStyle(color: color)),
-                onTap: () => _fill(m),
-              ));
+              final statusColor = _getStatusColor(status);
+              
+              return Card(
+                child: ListTile(
+                  leading: Icon(_getStatusIcon(status), color: statusColor, size: 32),
+                  title: Text('Ödeme#${m['ODEME_ID']} • ${m['PLAKA'] ?? '-'} • ${m['Marka'] ?? '-'} ${m['Model'] ?? ''}'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Tür: $label • Tip: $tip • Tutar: ${tutar.toStringAsFixed(2)} TL'),
+                      Row(children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: statusColor),
+                          ),
+                          child: Text(
+                            status.toUpperCase(),
+                            style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11),
+                          ),
+                        ),
+                      ]),
+                    ],
+                  ),
+                  onTap: () => _fill(m),
+                ),
+              );
             },
           ),
         ),
