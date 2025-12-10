@@ -132,17 +132,58 @@ class _InsurancesPageState extends State<InsurancesPage> {
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (_, i) {
               final m = _items[i];
-              final status = (m['PAY_STATUS'] ?? 'Yok') as String;
-              final color = status == 'Ödendi' ? Colors.green : status == 'Kısmi' ? Colors.orange : Colors.red;
-              final paid = (m['PAID_TOTAL'] as num?)?.toDouble() ?? 0.0;
+              final payStatus = (m['PAY_STATUS'] ?? 'Yok') as String;
+              final paidTotal = (m['PAID_TOTAL'] as num?)?.toDouble() ?? 0.0;
+              final maliyet = (m['MALIYET'] as num?)?.toDouble() ?? 0.0;
+              final kalan = maliyet - paidTotal;
+              final statusColor = _getStatusColor(payStatus);
+              
               return Card(child: ListTile(
-                leading: Icon(((m['AKTIFMI'] ?? 0) == 1) ? Icons.local_police : Icons.gpp_bad, color: ((m['AKTIFMI'] ?? 0) == 1) ? Colors.green : Colors.orange),
+                leading: Icon(_getStatusIcon(payStatus), color: statusColor, size: 32),
                 title: Text('Sigorta#${m['SIGORTA_ID']} • ${m['PLAKA']} • ${m['Marka']} ${m['Model']}'),
-                subtitle: Text('Ad: ${m['SIGORTA_ADI'] ?? '-'} • Kapsam: ${m['KAPSAM_TURU'] ?? '-'} • Maliyet: ${m['MALIYET'] ?? '-'} • Ödenen: ${paid.toStringAsFixed(2)}'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Ad: ${m['SIGORTA_ADI'] ?? '-'} • Kapsam: ${m['KAPSAM_TURU'] ?? '-'} • Maliyet: ${maliyet.toStringAsFixed(2)} TL'),
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: statusColor),
+                        ),
+                        child: Text(
+                          payStatus == 'Yok' ? 'ÖDENMEDİ' : payStatus.toUpperCase(),
+                          style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('Ödenen: ${paidTotal.toStringAsFixed(2)} TL', style: const TextStyle(fontSize: 12)),
+                      if (kalan > 0) ...[
+                        const SizedBox(width: 8),
+                        Text('Kalan: ${kalan.toStringAsFixed(2)} TL', style: TextStyle(fontSize: 12, color: Colors.red.shade700, fontWeight: FontWeight.bold)),
+                      ],
+                      const SizedBox(width: 8),
+                      Chip(
+                        label: Text(((m['AKTIFMI'] ?? 0) == 1) ? 'Aktif' : 'Pasif'),
+                        backgroundColor: ((m['AKTIFMI'] ?? 0) == 1) ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+                        labelStyle: TextStyle(color: ((m['AKTIFMI'] ?? 0) == 1) ? Colors.green : Colors.orange, fontSize: 10),
+                      ),
+                    ]),
+                  ],
+                ),
                 trailing: Wrap(spacing: 6, children: [
-                  Chip(label: Text(status), backgroundColor: color.withOpacity(0.1), labelStyle: TextStyle(color: color)),
-                  OutlinedButton.icon(onPressed: () => setState(() => _selected = m), icon: const Icon(Icons.edit), label: const Text('Düzenle')),
-                  FilledButton.icon(onPressed: () { setState(() => _selected = m); _quickPay(); }, icon: const Icon(Icons.payments), label: const Text('Öde')),
+                  OutlinedButton.icon(onPressed: () => _fill(m), icon: const Icon(Icons.edit, size: 18), label: const Text('Seç')),
+                  if (kalan > 0)
+                    FilledButton.icon(
+                      onPressed: () {
+                        _fill(m);
+                        _quickPay();
+                      },
+                      icon: const Icon(Icons.payments, size: 18),
+                      label: const Text('Öde'),
+                    ),
                 ]),
                 onTap: () => _fill(m),
               ));
@@ -179,5 +220,27 @@ class _InsurancesPageState extends State<InsurancesPage> {
         ]),
       ]))),
     ]);
+  }
+  
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Ödendi':
+        return Colors.green;
+      case 'Kısmi':
+        return Colors.orange;
+      default:
+        return Colors.red;
+    }
+  }
+  
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'Ödendi':
+        return Icons.check_circle;
+      case 'Kısmi':
+        return Icons.hourglass_bottom;
+      default:
+        return Icons.cancel;
+    }
   }
 }
