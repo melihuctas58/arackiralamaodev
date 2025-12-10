@@ -11,9 +11,19 @@ class _VehiclesPageState extends State<VehiclesPage> {
   final _q = TextEditingController();
 
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
   Map<String, dynamic>? _selected;
   bool _loading = false;
   String? _error;
+
+  // Filtreler
+  String _filterMarka = 'Tümü';
+  String _filterDurum = 'Tümü';
+  String _filterYakitTipi = 'Tümü';
+  String _filterVitesTipi = 'Tümü';
+  List<String> _markalar = ['Tümü'];
+  List<String> _yakitTipleri = ['Tümü'];
+  List<String> _vitesTipleri = ['Tümü'];
 
   final fSase = TextEditingController();
   final fPlaka = TextEditingController();
@@ -49,7 +59,56 @@ class _VehiclesPageState extends State<VehiclesPage> {
       } else {
         _items = await _repo.listAllCarsServerWide(q: term.isEmpty ? null : term);
       }
+      
+      // Marka, yakıt tipi, vites tipi topla
+      final markaSet = <String>{'Tümü'};
+      final yakitSet = <String>{'Tümü'};
+      final vitesSet = <String>{'Tümü'};
+      for (final m in _items) {
+        final marka = (m['Marka'] ?? '').toString();
+        final yakit = (m['Yakit_Tipi'] ?? '').toString();
+        final vites = (m['Vites'] ?? '').toString();
+        if (marka.isNotEmpty) markaSet.add(marka);
+        if (yakit.isNotEmpty) yakitSet.add(yakit);
+        if (vites.isNotEmpty) vitesSet.add(vites);
+      }
+      _markalar = markaSet.toList()..sort();
+      _yakitTipleri = yakitSet.toList()..sort();
+      _vitesTipleri = vitesSet.toList()..sort();
+      
+      _applyFilters();
     } catch (e) { _error = e.toString(); } finally { setState(() => _loading = false); }
+  }
+
+  void _applyFilters() {
+    _filteredItems = _items.where((m) {
+      // Marka filtresi
+      if (_filterMarka != 'Tümü') {
+        final marka = (m['Marka'] ?? '').toString();
+        if (marka != _filterMarka) return false;
+      }
+      
+      // Durum filtresi
+      if (_filterDurum != 'Tümü') {
+        final durum = (m['DURUM'] ?? '').toString();
+        if (durum != _filterDurum) return false;
+      }
+      
+      // Yakıt tipi filtresi
+      if (_filterYakitTipi != 'Tümü') {
+        final yakit = (m['Yakit_Tipi'] ?? '').toString();
+        if (yakit != _filterYakitTipi) return false;
+      }
+      
+      // Vites tipi filtresi
+      if (_filterVitesTipi != 'Tümü') {
+        final vites = (m['Vites'] ?? '').toString();
+        if (vites != _filterVitesTipi) return false;
+      }
+      
+      return true;
+    }).toList();
+    setState(() {});
   }
 
   Future<Map<String, dynamic>?> _pickModel() => SearchSelectDialog.show(
@@ -180,21 +239,78 @@ class _VehiclesPageState extends State<VehiclesPage> {
           const SizedBox(width: 8),
           TextButton.icon(onPressed: () => setState(() { showOtherBranches = !showOtherBranches; _load(); }), icon: const Icon(Icons.swap_horiz), label: Text(showOtherBranches ? 'Tüm şubeler' : 'Sadece aktif şube')),
         ])),
+        
+        // Filtreler
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(children: [
+            const Text('Filtreler: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            
+            // Marka Filtresi
+            DropdownButton<String>(
+              value: _markalar.contains(_filterMarka) ? _filterMarka : 'Tümü',
+              items: _markalar.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterMarka = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            const SizedBox(width: 12),
+            
+            // Durum Filtresi
+            DropdownButton<String>(
+              value: _filterDurum,
+              items: ['Tümü', ..._durumItems].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterDurum = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            const SizedBox(width: 12),
+            
+            // Yakıt Tipi Filtresi
+            DropdownButton<String>(
+              value: _yakitTipleri.contains(_filterYakitTipi) ? _filterYakitTipi : 'Tümü',
+              items: _yakitTipleri.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterYakitTipi = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            const SizedBox(width: 12),
+            
+            // Vites Tipi Filtresi
+            DropdownButton<String>(
+              value: _vitesTipleri.contains(_filterVitesTipi) ? _filterVitesTipi : 'Tümü',
+              items: _vitesTipleri.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterVitesTipi = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            
+            const Spacer(),
+            Text('${_filteredItems.length} / ${_items.length} araç', style: const TextStyle(color: Colors.grey)),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        
         Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) : _error != null ? Center(child: Text('Hata: $_error')) :
           ListView.separated(
             padding: const EdgeInsets.all(12),
-            itemCount: _items.length,
+            itemCount: _filteredItems.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (_, i) {
-              final m = _items[i];
+              final m = _filteredItems[i];
               final otherLbl = showOtherBranches ? ' • ŞubeID:${m['GUNCEL_SUBE_ID']}' : '';
               return Card(child: ListTile(
                 leading: const Icon(Icons.directions_car),
                 title: Text('${m['PLAKA']} • ${m['Marka']} ${m['Seri'] ?? ''} ${m['Model']} (${m['Yil']})$otherLbl'),
-                subtitle: Text('KM: ${m['KM']} • Durum: ${m['DURUM'] ?? '-'} • Renk: ${m['RENK'] ?? '-'}'),
+                subtitle: Text('KM: ${m['KM']} • Durum: ${m['DURUM'] ?? '-'} • Renk: ${m['RENK'] ?? '-'} • Yakıt: ${m['Yakit_Tipi'] ?? '-'} • Vites: ${m['Vites'] ?? '-'}'),
                 trailing: Wrap(spacing: 6, children: [
-                  OutlinedButton.icon(onPressed: () => _fill(m), icon: const Icon(Icons.edit), label: const Text('Seç')),
-                  if (canTransfer) FilledButton.icon(onPressed: _transferToMe, icon: const Icon(Icons.publish), label: const Text('Şubeme Transfer Et')),
+                  OutlinedButton.icon(onPressed: () => _fill(m), icon: const Icon(Icons.edit, size: 18), label: const Text('Seç')),
+                  if (canTransfer) FilledButton.icon(onPressed: _transferToMe, icon: const Icon(Icons.publish, size: 18), label: const Text('Şubeme Transfer Et')),
                 ]),
                 onTap: () => _fill(m),
               ));

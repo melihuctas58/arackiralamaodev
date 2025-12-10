@@ -10,9 +10,16 @@ class _PaymentsPageState extends State<PaymentsPage> {
 
   final _q = TextEditingController();
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
   Map<String, dynamic>? _selected;
   bool _loading = true;
   String? _error;
+
+  // Filtreler
+  String _filterTur = 'Tümü'; // Kira, Ceza, Sigorta, Bakım, Kaza
+  String _filterTip = 'Tümü'; // Nakit, Kart, Havale
+  List<String> _turler = ['Tümü'];
+  List<String> _tipler = ['Tümü'];
 
   final upTutar = TextEditingController();
   String upTur = 'Kira';
@@ -23,8 +30,43 @@ class _PaymentsPageState extends State<PaymentsPage> {
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; _selected = null; });
-    try { _items = await _repo.listByBranch(Session().current!.subeId, q: _q.text.trim()); }
+    try {
+      _items = await _repo.listByBranch(Session().current!.subeId, q: _q.text.trim());
+      
+      // Tür ve Tip topla
+      final turSet = <String>{'Tümü'};
+      final tipSet = <String>{'Tümü'};
+      for (final m in _items) {
+        final tur = (m['ODEME_TURU'] ?? '').toString();
+        final tip = (m['ODEME_TIPI'] ?? '').toString();
+        if (tur.isNotEmpty) turSet.add(tur);
+        if (tip.isNotEmpty) tipSet.add(tip);
+      }
+      _turler = turSet.toList()..sort();
+      _tipler = tipSet.toList()..sort();
+      
+      _applyFilters();
+    }
     catch (e) { _error = e.toString(); } finally { setState(() => _loading = false); }
+  }
+
+  void _applyFilters() {
+    _filteredItems = _items.where((m) {
+      // Tür filtresi
+      if (_filterTur != 'Tümü') {
+        final tur = (m['ODEME_TURU'] ?? '').toString();
+        if (tur != _filterTur) return false;
+      }
+      
+      // Tip filtresi
+      if (_filterTip != 'Tümü') {
+        final tip = (m['ODEME_TIPI'] ?? '').toString();
+        if (tip != _filterTip) return false;
+      }
+      
+      return true;
+    }).toList();
+    setState(() {});
   }
 
   Future<void> _delete() async {
@@ -75,23 +117,81 @@ class _PaymentsPageState extends State<PaymentsPage> {
           Expanded(child: TextField(controller: _q, decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Ödeme/Plaka/Model/Kiralama ara...'), onSubmitted: (_) => _load())),
           const SizedBox(width: 8), FilledButton(onPressed: _load, child: const Text('Yenile')),
         ])),
+        
+        // Filtreler
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(children: [
+            const Text('Filtreler: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            
+            // Ödeme Türü Filtresi
+            DropdownButton<String>(
+              value: _turler.contains(_filterTur) ? _filterTur : 'Tümü',
+              items: _turler.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterTur = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            const SizedBox(width: 16),
+            
+            // Ödeme Tipi Filtresi
+            DropdownButton<String>(
+              value: _tipler.contains(_filterTip) ? _filterTip : 'Tümü',
+              items: _tipler.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterTip = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            
+            const Spacer(),
+            Text('${_filteredItems.length} / ${_items.length} kayıt', style: const TextStyle(color: Colors.grey)),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        
         Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) : _error != null ? Center(child: Text('Hata: $_error')) :
           ListView.separated(
             padding: const EdgeInsets.all(12),
-            itemCount: _items.length,
+            itemCount: _filteredItems.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (_, i) {
-              final m = _items[i];
+              final m = _filteredItems[i];
               final label = (m['ODEME_TURU'] ?? '-') as String;
               final tip = (m['ODEME_TIPI'] ?? '-') as String;
-              final tutar = (m['ODEME_TUTARI'] ?? '-') .toString();
+              final tutar = (m['ODEME_TUTARI'] ?? 0).toDouble();
               final status = _payStatus(m);
               final color = _statusColor(status);
               return Card(child: ListTile(
                 leading: const Icon(Icons.payments),
                 title: Text('Ödeme#${m['ODEME_ID']} • ${m['PLAKA'] ?? '-'} • ${m['Marka'] ?? '-'} ${m['Model'] ?? ''}'),
-                subtitle: Text('Tür: $label • Tip: $tip • Tutar: $tutar'),
-                trailing: Chip(label: Text(status), backgroundColor: color.withOpacity(0.1), labelStyle: TextStyle(color: color)),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Tür: $label • Tip: $tip • Tutar: ${tutar.toStringAsFixed(2)} TL'),
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: color),
+                        ),
+                        child: Text(
+                          status.toUpperCase(),
+                          style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ),
+                    ]),
+                  ],
+                ),
+                trailing: OutlinedButton.icon(
+                  onPressed: () => _fill(m),
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: const Text('Düzenle'),
+                ),
                 onTap: () => _fill(m),
               ));
             },

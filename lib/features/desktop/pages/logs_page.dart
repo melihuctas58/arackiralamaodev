@@ -7,13 +7,55 @@ class _LogsPageState extends State<LogsPage> {
   final _repo = LogsRepository();
   final _q = TextEditingController();
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
   Map<String, dynamic>? _selected;
   String? _error; bool _loading = false;
 
+  // Filtreler
+  String _filterAction = 'Tümü';
+  String _filterRelatedType = 'Tümü';
+  List<String> _actions = ['Tümü'];
+  List<String> _relatedTypes = ['Tümü'];
+
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; _selected = null; _items = []; });
-    try { _items = await _repo.listByBranch(Session().current!.subeId, q: _q.text.trim()); }
+    try {
+      _items = await _repo.listByBranch(Session().current!.subeId, q: _q.text.trim());
+      
+      // Aksiyonları ve ilgili tipleri topla
+      final actionSet = <String>{'Tümü'};
+      final relatedSet = <String>{'Tümü'};
+      for (final m in _items) {
+        final action = (m['ACTION'] ?? '').toString();
+        final related = (m['RELATED_TYPE'] ?? '').toString();
+        if (action.isNotEmpty) actionSet.add(action);
+        if (related.isNotEmpty) relatedSet.add(related);
+      }
+      _actions = actionSet.toList()..sort();
+      _relatedTypes = relatedSet.toList()..sort();
+      
+      _applyFilters();
+    }
     catch (e) { _error = e.toString(); } finally { setState(() => _loading = false); }
+  }
+
+  void _applyFilters() {
+    _filteredItems = _items.where((m) {
+      // Action filtresi
+      if (_filterAction != 'Tümü') {
+        final action = (m['ACTION'] ?? '').toString();
+        if (action != _filterAction) return false;
+      }
+      
+      // Related Type filtresi
+      if (_filterRelatedType != 'Tümü') {
+        final related = (m['RELATED_TYPE'] ?? '').toString();
+        if (related != _filterRelatedType) return false;
+      }
+      
+      return true;
+    }).toList();
+    setState(() {});
   }
 
   @override void initState() { super.initState(); _load(); }
@@ -26,9 +68,44 @@ class _LogsPageState extends State<LogsPage> {
           Expanded(child: TextField(controller: _q, decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Log ara...'), onSubmitted: (_) => _load())),
           const SizedBox(width: 8), FilledButton(onPressed: _load, child: const Text('Yenile')),
         ])),
+        
+        // Filtreler
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(children: [
+            const Text('Filtreler: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            
+            // Action Filtresi
+            DropdownButton<String>(
+              value: _actions.contains(_filterAction) ? _filterAction : 'Tümü',
+              items: _actions.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterAction = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            const SizedBox(width: 12),
+            
+            // Related Type Filtresi
+            DropdownButton<String>(
+              value: _relatedTypes.contains(_filterRelatedType) ? _filterRelatedType : 'Tümü',
+              items: _relatedTypes.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterRelatedType = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            
+            const Spacer(),
+            Text('${_filteredItems.length} / ${_items.length} log', style: const TextStyle(color: Colors.grey)),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        
         Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) : _error != null ? Center(child: Text('Hata: $_error')) :
-          ListView.separated(padding: const EdgeInsets.all(12), itemCount: _items.length, separatorBuilder: (_, __) => const SizedBox(height: 8), itemBuilder: (_, i) {
-            final m = _items[i];
+          ListView.separated(padding: const EdgeInsets.all(12), itemCount: _filteredItems.length, separatorBuilder: (_, __) => const SizedBox(height: 8), itemBuilder: (_, i) {
+            final m = _filteredItems[i];
             return Card(child: ListTile(
               leading: const Icon(Icons.event_note),
               title: Text('${m['ACTION']} • ${m['MESSAGE']}'),

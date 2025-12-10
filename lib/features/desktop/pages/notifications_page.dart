@@ -9,17 +9,45 @@ class _NotificationsPageState extends State<NotificationsPage> {
   final _q = TextEditingController();
   bool _onlyUnread = true;
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _filteredItems = [];
   Map<String, dynamic>? _selected;
   String? _error;
   bool _loading = false;
+
+  // Filtreler
+  String _filterCategory = 'Tümü';
+  List<String> _categories = ['Tümü'];
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; _selected = null; _items = []; });
     try {
       final rows = await _repo.listByBranch(Session().current!.subeId, onlyUnread: _onlyUnread, q: _q.text.trim());
       setState(() => _items = rows);
+      
+      // Kategorileri topla
+      final catSet = <String>{'Tümü'};
+      for (final m in _items) {
+        final cat = (m['CATEGORY'] ?? '').toString();
+        if (cat.isNotEmpty) catSet.add(cat);
+      }
+      _categories = catSet.toList()..sort();
+      
+      _applyFilters();
       await _refreshUnreadBadge();
     } catch (e) { _error = e.toString(); } finally { setState(() => _loading = false); }
+  }
+
+  void _applyFilters() {
+    _filteredItems = _items.where((m) {
+      // Kategori filtresi
+      if (_filterCategory != 'Tümü') {
+        final cat = (m['CATEGORY'] ?? '').toString();
+        if (cat != _filterCategory) return false;
+      }
+      
+      return true;
+    }).toList();
+    setState(() {});
   }
 
   @override void initState() { super.initState(); _load(); }
@@ -58,9 +86,33 @@ class _NotificationsPageState extends State<NotificationsPage> {
           Row(children: [ Checkbox(value: _onlyUnread, onChanged: (v) => setState(() => _onlyUnread = v ?? true)), const Text('Sadece okunmamış') ]),
           const SizedBox(width: 8), FilledButton(onPressed: _load, child: const Text('Yenile')),
         ])),
+        
+        // Filtreler
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(children: [
+            const Text('Kategori: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            
+            // Kategori Filtresi
+            DropdownButton<String>(
+              value: _categories.contains(_filterCategory) ? _filterCategory : 'Tümü',
+              items: _categories.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                setState(() => _filterCategory = v ?? 'Tümü');
+                _applyFilters();
+              },
+            ),
+            
+            const Spacer(),
+            Text('${_filteredItems.length} / ${_items.length} bildirim', style: const TextStyle(color: Colors.grey)),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        
         Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) : _error != null ? Center(child: Text('Hata: $_error')) :
-          ListView.separated(padding: const EdgeInsets.all(12), itemCount: _items.length, separatorBuilder: (_, __) => const SizedBox(height: 8), itemBuilder: (_, i) {
-            final m = _items[i];
+          ListView.separated(padding: const EdgeInsets.all(12), itemCount: _filteredItems.length, separatorBuilder: (_, __) => const SizedBox(height: 8), itemBuilder: (_, i) {
+            final m = _filteredItems[i];
             final read = (m['IS_READ'] == 1 || m['IS_READ'] == true);
             return Card(child: ListTile(
               leading: Icon(read ? Icons.notifications : Icons.notification_important, color: read ? Colors.indigo : Colors.orange),
